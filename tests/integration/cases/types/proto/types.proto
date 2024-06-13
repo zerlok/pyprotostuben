@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package types;
+
+message STD {
+  bool b1 = 1;
+  int32 i32 = 2;
+  float f = 3;
+  string str = 4;
+  repeated int32 intseq = 5;
+  optional string opt = 6;
+}

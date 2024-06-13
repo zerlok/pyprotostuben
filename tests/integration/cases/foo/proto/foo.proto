@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package bar;
+
+message Spam {
+  string eggs = 1;
+  repeated int64 pizza = 2;
+  optional string apple = 3;
+}

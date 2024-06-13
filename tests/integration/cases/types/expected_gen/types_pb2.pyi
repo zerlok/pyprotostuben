@@ -1,0 +1,29 @@
+import builtins
+import google.protobuf.message
+import typing
+
+class STD(google.protobuf.message.Message):
+
+    def __init__(self, *, b1: builtins.bool, i32: builtins.int, f: builtins.float, str: builtins.str, intseq: typing.Sequence[builtins.int], opt: typing.Optional[builtins.str]=None) -> None:...
+
+    @builtins.property
+    def b1(self) -> builtins.bool:...
+
+    @builtins.property
+    def i32(self) -> builtins.int:...
+
+    @builtins.property
+    def f(self) -> builtins.float:...
+
+    @builtins.property
+    def str(self) -> builtins.str:...
+
+    @builtins.property
+    def intseq(self) -> typing.Sequence[builtins.int]:...
+
+    @builtins.property
+    def opt(self) -> builtins.str:...
+
+    def HasField(self, field_name: typing.Literal['opt']) -> bool:...
+
+    def WhichOneof(self, oneof_group: typing.NoReturn) -> typing.NoReturn:...
