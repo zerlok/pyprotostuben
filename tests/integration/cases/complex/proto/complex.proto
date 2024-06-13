@@ -12,8 +12,7 @@ message Message2 {
 }
 
 message MessageOptional {
-  string f1 = 1;
-  optional string f2 = 2;
+  optional Message2 optmsg = 1;
 }
 
 message NestedRoot {

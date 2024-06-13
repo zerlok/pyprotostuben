@@ -134,9 +134,9 @@ class ModuleStubBuilder(ProtoVisitor):
                                 annotation=self.__ast.build_generic_instance_expr(
                                     resolver.resolve_optional(), field.annotation
                                 )
-                                if field.optional
+                                if field.optional or field.oneof
                                 else field.annotation,
-                                default=self.__ast.build_none_expr() if field.optional else None,
+                                default=self.__ast.build_none_expr() if field.optional or field.oneof else None,
                             )
                             for field in fields
                         ],
@@ -212,6 +212,7 @@ class ModuleStubBuilder(ProtoVisitor):
         name = proto.name
         is_multi = proto.label == FieldDescriptorProto.Label.LABEL_REPEATED
         is_optional = proto.proto3_optional
+        is_oneof = not is_optional and proto.HasField("oneof_index")
 
         annotation = self.get_resolver(self.file.pb2_message).resolve_protobuf_field(proto)
 
@@ -221,11 +222,12 @@ class ModuleStubBuilder(ProtoVisitor):
                 annotation=annotation,
                 multi=is_multi,
                 optional=is_optional,
+                oneof=is_oneof,
                 # TODO: support default fields: proto.default_value
             )
         )
 
-        if not is_optional and proto.HasField("oneof_index"):
+        if is_oneof:
             message.oneofs[proto.oneof_index].items.append(name)
 
     def visit_service_descriptor_proto(self, proto: ServiceDescriptorProto) -> None:

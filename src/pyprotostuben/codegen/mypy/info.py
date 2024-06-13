@@ -31,6 +31,7 @@ class FieldInfo:
     annotation: ast.expr
     multi: bool = False
     optional: bool = False
+    oneof: bool = False
 
 
 @dataclass()
