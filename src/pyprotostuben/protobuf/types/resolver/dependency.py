@@ -1,6 +1,11 @@
 import typing as t
 
-from google.protobuf.descriptor_pb2 import FieldDescriptorProto, DescriptorProto, EnumDescriptorProto
+from google.protobuf.descriptor_pb2 import (
+    FieldDescriptorProto,
+    DescriptorProto,
+    EnumDescriptorProto,
+    MethodDescriptorProto,
+)
 
 from pyprotostuben.logging import LoggerMixin
 from pyprotostuben.protobuf.types.resolver.abc import TypeResolver
@@ -33,6 +38,12 @@ class ModuleDependencyResolver(TypeResolver[NamespaceInfo], LoggerMixin):
     def resolve_property(self) -> NamespaceInfo:
         return self.__resolve(self.__inner.resolve_property())
 
+    def resolve_abstract_meta(self) -> NamespaceInfo:
+        return self.__resolve(self.__inner.resolve_abstract_meta())
+
+    def resolve_abstract_method(self) -> NamespaceInfo:
+        return self.__resolve(self.__inner.resolve_abstract_method())
+
     def resolve_optional(self) -> NamespaceInfo:
         return self.__resolve(self.__inner.resolve_optional())
 
@@ -50,6 +61,15 @@ class ModuleDependencyResolver(TypeResolver[NamespaceInfo], LoggerMixin):
 
     def resolve_protobuf_field(self, proto: FieldDescriptorProto) -> NamespaceInfo:
         return self.__resolve(self.__inner.resolve_protobuf_field(proto))
+
+    def resolve_grpc_servicer_context(self, proto: MethodDescriptorProto) -> NamespaceInfo:
+        return self.__resolve(self.__inner.resolve_grpc_servicer_context(proto))
+
+    def resolve_grpc_method_input(self, proto: MethodDescriptorProto) -> NamespaceInfo:
+        return self.__resolve(self.__inner.resolve_grpc_method_input(proto))
+
+    def resolve_grpc_method_output(self, proto: MethodDescriptorProto) -> NamespaceInfo:
+        return self.__resolve(self.__inner.resolve_grpc_method_output(proto))
 
     def __resolve(self, type_: TypeInfo) -> NamespaceInfo:
         if type_.module == self.__module:

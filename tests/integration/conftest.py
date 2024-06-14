@@ -28,9 +28,12 @@ def case(request: SubRequest, tmp_path: Path) -> Case:
     proto_dir = case_dir / "proto"
     expected_gen_dir = case_dir / "expected_gen"
 
+    request = _read_request(proto_dir, tmp_path)
+    request.parameter = "no-parallel"  # for easier debug
+
     return Case(
         generator=MypyStubCodeGenerator(),
-        request=_read_request(proto_dir, tmp_path),
+        request=request,
         gen_expected_files=[
             CodeGeneratorResponse.File(
                 name=str(path.relative_to(expected_gen_dir)),

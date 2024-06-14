@@ -1,6 +1,11 @@
 import ast
 
-from google.protobuf.descriptor_pb2 import FieldDescriptorProto, DescriptorProto, EnumDescriptorProto
+from google.protobuf.descriptor_pb2 import (
+    FieldDescriptorProto,
+    DescriptorProto,
+    EnumDescriptorProto,
+    MethodDescriptorProto,
+)
 
 from pyprotostuben.codegen.builder import ASTBuilder
 from pyprotostuben.protobuf.types.resolver.abc import TypeResolver
@@ -27,6 +32,12 @@ class ASTTypeResolver(TypeResolver[ast.expr]):
     def resolve_property(self) -> ast.expr:
         return self.__build_expr(self.__inner.resolve_property())
 
+    def resolve_abstract_meta(self) -> ast.expr:
+        return self.__build_expr(self.__inner.resolve_abstract_meta())
+
+    def resolve_abstract_method(self) -> ast.expr:
+        return self.__build_expr(self.__inner.resolve_abstract_method())
+
     def resolve_optional(self) -> ast.expr:
         return self.__build_expr(self.__inner.resolve_optional())
 
@@ -48,6 +59,19 @@ class ASTTypeResolver(TypeResolver[ast.expr]):
             expr = self.__ast.build_generic_instance_expr(self.resolve_sequence(), expr)
 
         return expr
+
+    def resolve_grpc_servicer_context(self, proto: MethodDescriptorProto) -> ast.expr:
+        return self.__ast.build_generic_instance_expr(
+            self.__build_expr(self.__inner.resolve_grpc_servicer_context(proto)),
+            self.resolve_grpc_method_input(proto),
+            self.resolve_grpc_method_output(proto),
+        )
+
+    def resolve_grpc_method_input(self, proto: MethodDescriptorProto) -> ast.expr:
+        return self.__build_expr(self.__inner.resolve_grpc_method_input(proto))
+
+    def resolve_grpc_method_output(self, proto: MethodDescriptorProto) -> ast.expr:
+        return self.__build_expr(self.__inner.resolve_grpc_method_output(proto))
 
     def __build_expr(self, info: NamespaceInfo) -> ast.expr:
         return self.__ast.build_attr_expr(*info.parts)

@@ -28,14 +28,14 @@ class ASTBuilder:
         name: str,
         decorators: t.Optional[t.Sequence[ast.expr]] = None,
         bases: t.Optional[t.Sequence[ast.expr]] = None,
-        keywords: t.Optional[t.Sequence[ast.keyword]] = None,
+        keywords: t.Optional[t.Mapping[str, ast.expr]] = None,
         body: t.Optional[t.Sequence[ast.stmt]] = None,
     ) -> ast.ClassDef:
         return ast.ClassDef(
             name=name,
             decorator_list=decorators or [],
             bases=bases or [],
-            keywords=keywords or [],
+            keywords=[ast.keyword(arg=key, value=value) for key, value in (keywords or {}).items()],
             body=body or [],
         )
 

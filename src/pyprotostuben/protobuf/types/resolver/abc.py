@@ -1,7 +1,12 @@
 import abc
 import typing as t
 
-from google.protobuf.descriptor_pb2 import FieldDescriptorProto, DescriptorProto, EnumDescriptorProto
+from google.protobuf.descriptor_pb2 import (
+    FieldDescriptorProto,
+    DescriptorProto,
+    EnumDescriptorProto,
+    MethodDescriptorProto,
+)
 
 T_co = t.TypeVar("T_co")
 
@@ -28,6 +33,14 @@ class TypeResolver(t.Generic[T_co], metaclass=abc.ABCMeta):
         raise NotImplementedError()
 
     @abc.abstractmethod
+    def resolve_abstract_meta(self) -> T_co:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def resolve_abstract_method(self) -> T_co:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
     def resolve_optional(self) -> T_co:
         raise NotImplementedError()
 
@@ -49,4 +62,16 @@ class TypeResolver(t.Generic[T_co], metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def resolve_protobuf_field(self, proto: FieldDescriptorProto) -> T_co:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def resolve_grpc_servicer_context(self, proto: MethodDescriptorProto) -> T_co:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def resolve_grpc_method_input(self, proto: MethodDescriptorProto) -> T_co:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def resolve_grpc_method_output(self, proto: MethodDescriptorProto) -> T_co:
         raise NotImplementedError()

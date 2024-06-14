@@ -57,7 +57,13 @@ class MessageInfo:
 
 
 @dataclass()
-class ServiceInfo:
+class ServicerInfo:
+    # dependencies: t.Set[ModuleInfo] = field(default_factory=set)
+    body: t.MutableSequence[ast.stmt] = field(default_factory=list)
+
+
+@dataclass()
+class StubInfo:
     # dependencies: t.Set[ModuleInfo] = field(default_factory=set)
     body: t.MutableSequence[ast.stmt] = field(default_factory=list)
 
@@ -67,7 +73,8 @@ class ScopeInfo:
     name: str
     dependencies: t.Set[ModuleInfo] = field(default_factory=set)
     message: MessageInfo = field(default_factory=MessageInfo)
-    service: ServiceInfo = field(default_factory=ServiceInfo)
+    servicer: ServicerInfo = field(default_factory=ServicerInfo)
+    stub: StubInfo = field(default_factory=StubInfo)
 
 
 class ScopeProtoVisitorDecorator(ProtoVisitorDecorator):

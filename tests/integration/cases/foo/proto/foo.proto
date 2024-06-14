@@ -2,8 +2,15 @@ syntax = "proto3";
 
 package bar;
 
-message Spam {
+message SpamRequest {
   string eggs = 1;
-  repeated int64 pizza = 2;
-  optional string apple = 3;
+}
+
+message SpamResponse {
+  string banana = 1;
+}
+
+service SpamService {
+  rpc Do(SpamRequest) returns (SpamResponse) {}
+  rpc Stream(stream SpamRequest) returns (stream SpamResponse) {}
 }

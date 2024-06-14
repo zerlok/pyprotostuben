@@ -1,7 +1,12 @@
 import functools as ft
 import typing as t
 
-from google.protobuf.descriptor_pb2 import FieldDescriptorProto, EnumDescriptorProto, DescriptorProto
+from google.protobuf.descriptor_pb2 import (
+    FieldDescriptorProto,
+    EnumDescriptorProto,
+    DescriptorProto,
+    MethodDescriptorProto,
+)
 
 from pyprotostuben.protobuf.types.resolver.abc import TypeResolver
 from pyprotostuben.python.info import TypeInfo, ModuleInfo, PackageInfo
@@ -68,6 +73,14 @@ class TypeRegistry(TypeResolver[TypeInfo]):
         return TypeInfo(self.builtins_module, "property")
 
     @ft.lru_cache(1)
+    def resolve_abstract_meta(self) -> TypeInfo:
+        return TypeInfo(self.abc_module, "ABCMeta")
+
+    @ft.lru_cache(1)
+    def resolve_abstract_method(self) -> TypeInfo:
+        return TypeInfo(self.abc_module, "abstractmethod")
+
+    @ft.lru_cache(1)
     def resolve_optional(self) -> TypeInfo:
         return TypeInfo(self.typing_module, "Optional")
 
@@ -93,9 +106,22 @@ class TypeRegistry(TypeResolver[TypeInfo]):
 
         return self.__custom[proto.type_name]
 
+    def resolve_grpc_servicer_context(self, proto: MethodDescriptorProto) -> TypeInfo:
+        return TypeInfo.create(self.grpc_module, "ServicerContext")
+
+    def resolve_grpc_method_input(self, proto: MethodDescriptorProto) -> TypeInfo:
+        return self.__custom[proto.input_type]
+
+    def resolve_grpc_method_output(self, proto: MethodDescriptorProto) -> TypeInfo:
+        return self.__custom[proto.output_type]
+
     @ft.cached_property
     def builtins_module(self) -> ModuleInfo:
         return ModuleInfo.build("builtins")
+
+    @ft.cached_property
+    def abc_module(self) -> ModuleInfo:
+        return ModuleInfo.build("abc")
 
     @ft.cached_property
     def typing_module(self) -> ModuleInfo:
@@ -104,6 +130,10 @@ class TypeRegistry(TypeResolver[TypeInfo]):
     @ft.cached_property
     def protobuf_package(self) -> PackageInfo:
         return PackageInfo.build("google", "protobuf")
+
+    @ft.cached_property
+    def grpc_module(self) -> ModuleInfo:
+        return ModuleInfo(PackageInfo(None, "grpc"), "aio")
 
     @ft.cached_property
     def int_enum_cls(self) -> TypeInfo:

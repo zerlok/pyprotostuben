@@ -62,7 +62,8 @@ class ModuleStubBuilder(ProtoVisitor):
     def visit_file_descriptor_proto(self, proto: FileDescriptorProto) -> None:
         scope = self.current_scope
         message = scope.message
-        service = scope.service
+        servicer = scope.servicer
+        stub = scope.stub
 
         if message.body:
             self.__modules[self.file.pb2_message.stub_file] = self.__ast.build_module(
@@ -70,10 +71,11 @@ class ModuleStubBuilder(ProtoVisitor):
                 *message.body,
             )
 
-        if service.body:
+        if servicer.body and stub.body:
             self.__modules[self.file.pb2_grpc.stub_file] = self.__ast.build_module(
                 *self.__build_imports(scope.dependencies),
-                *service.body,
+                *servicer.body,
+                *stub.body,
             )
 
     def visit_enum_descriptor_proto(self, proto: EnumDescriptorProto) -> None:
@@ -96,7 +98,6 @@ class ModuleStubBuilder(ProtoVisitor):
 
         scope = self.current_scope
         message = scope.message
-        # service = scope.service
         fields = message.fields
 
         parent_scope = self.parent_scope
@@ -231,10 +232,69 @@ class ModuleStubBuilder(ProtoVisitor):
             message.oneofs[proto.oneof_index].items.append(name)
 
     def visit_service_descriptor_proto(self, proto: ServiceDescriptorProto) -> None:
-        raise NotImplementedError(proto)
+        resolver = self.get_resolver(self.file.pb2_grpc)
+
+        servicer_name = f"{proto.name}Servicer"
+
+        self.parent_scope.servicer.body.append(
+            self.__ast.build_class_def(
+                name=servicer_name,
+                keywords={
+                    "metaclass": resolver.resolve_abstract_meta(),
+                },
+                body=[
+                    *self.current_scope.servicer.body,
+                ],
+            )
+        )
+        self.parent_scope.servicer.body.append(
+            self.__ast.build_func_stub(
+                name=f"add_{servicer_name}_to_server",
+                args=[
+                    ArgInfo(name="servicer", annotation=self.__ast.build_attr_expr(servicer_name)),
+                    ArgInfo(name="server", annotation=self.__ast.build_attr_expr(servicer_name)),
+                ],
+                returns=self.__ast.build_none_expr(),
+            )
+        )
+        self.parent_scope.stub.body.append(
+            self.__ast.build_class_def(
+                name=f"{proto.name}Stub",
+                body=[
+                    self.__ast.build_init_stub(args=[ArgInfo(name="channel", annotation=resolver.resolve_no_return())]),
+                    *self.current_scope.stub.body,
+                ],
+            )
+        )
 
     def visit_method_descriptor_proto(self, proto: MethodDescriptorProto) -> None:
-        raise NotImplementedError(proto)
+        resolver = self.get_resolver(self.file.pb2_grpc)
+
+        input_type = resolver.resolve_grpc_method_input(proto)
+        output_type = resolver.resolve_grpc_method_output(proto)
+
+        self.parent_scope.servicer.body.append(
+            self.__ast.build_instance_method_stub(
+                name=proto.name,
+                decorators=[resolver.resolve_abstract_method()],
+                args=[
+                    ArgInfo(name="request", annotation=input_type),
+                    ArgInfo(name="context", annotation=resolver.resolve_grpc_servicer_context(proto)),
+                ],
+                returns=output_type,
+                is_async=True,
+            )
+        )
+        self.parent_scope.stub.body.append(
+            self.__ast.build_instance_method_stub(
+                name=proto.name,
+                args=[
+                    ArgInfo(name="request", annotation=input_type),
+                ],
+                returns=output_type,
+                is_async=True,
+            )
+        )
 
     def __build_imports(self, dependencies: t.Collection[ModuleInfo]) -> t.Iterable[ast.stmt]:
         for module in sorted(dependencies, key=lambda x: x.qualname):
