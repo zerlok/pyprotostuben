@@ -6,10 +6,11 @@ from google.protobuf.descriptor_pb2 import (
     EnumDescriptorProto,
     DescriptorProto,
     MethodDescriptorProto,
+    ServiceDescriptorProto,
 )
 
-from pyprotostuben.protobuf.types.resolver.abc import TypeResolver
 from pyprotostuben.python.info import TypeInfo, ModuleInfo, PackageInfo
+from pyprotostuben.python.types.resolver.abc import TypeResolver
 
 
 def _iter_field_type_enum() -> t.Iterable[FieldDescriptorProto.Type.ValueType]:
@@ -105,6 +106,12 @@ class TypeRegistry(TypeResolver[TypeInfo]):
             return self.__builtin[type_]
 
         return self.__custom[proto.type_name]
+
+    def resolve_grpc_server(self, proto: ServiceDescriptorProto) -> TypeInfo:
+        return TypeInfo.create(self.grpc_module, "Server")
+
+    def resolve_grpc_channel(self, proto: ServiceDescriptorProto) -> TypeInfo:
+        return TypeInfo.create(self.grpc_module, "Channel")
 
     def resolve_grpc_servicer_context(self, proto: MethodDescriptorProto) -> TypeInfo:
         return TypeInfo.create(self.grpc_module, "ServicerContext")

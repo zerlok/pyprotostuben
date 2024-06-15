@@ -5,11 +5,12 @@ from google.protobuf.descriptor_pb2 import (
     DescriptorProto,
     EnumDescriptorProto,
     MethodDescriptorProto,
+    ServiceDescriptorProto,
 )
 
 from pyprotostuben.logging import LoggerMixin
-from pyprotostuben.protobuf.types.resolver.abc import TypeResolver
 from pyprotostuben.python.info import TypeInfo, ModuleInfo, NamespaceInfo
+from pyprotostuben.python.types.resolver.abc import TypeResolver
 
 
 class ModuleDependencyResolver(TypeResolver[NamespaceInfo], LoggerMixin):
@@ -64,6 +65,12 @@ class ModuleDependencyResolver(TypeResolver[NamespaceInfo], LoggerMixin):
 
     def resolve_grpc_servicer_context(self, proto: MethodDescriptorProto) -> NamespaceInfo:
         return self.__resolve(self.__inner.resolve_grpc_servicer_context(proto))
+
+    def resolve_grpc_server(self, proto: ServiceDescriptorProto) -> NamespaceInfo:
+        return self.__resolve(self.__inner.resolve_grpc_server(proto))
+
+    def resolve_grpc_channel(self, proto: ServiceDescriptorProto) -> NamespaceInfo:
+        return self.__resolve(self.__inner.resolve_grpc_channel(proto))
 
     def resolve_grpc_method_input(self, proto: MethodDescriptorProto) -> NamespaceInfo:
         return self.__resolve(self.__inner.resolve_grpc_method_input(proto))

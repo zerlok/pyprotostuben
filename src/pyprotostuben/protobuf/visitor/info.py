@@ -27,7 +27,6 @@ class NamespaceInfoVisitor(ProtoVisitorDecorator, LoggerMixin):
 
         file = ProtoFile(proto)
         self.__stack.put(ModuleInfo(file.pb2_package, file.proto_path.stem))
-        # self.__stack.put(file.pb2_message)
 
         log.info("entered")
 

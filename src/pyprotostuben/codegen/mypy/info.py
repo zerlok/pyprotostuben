@@ -20,6 +20,12 @@ from pyprotostuben.stack import MutableStack
 
 
 @dataclass()
+class CodeBlock:
+    dependencies: t.Set[ModuleInfo] = field(default_factory=set)
+    body: t.MutableSequence[ast.stmt] = field(default_factory=list)
+
+
+@dataclass()
 class EnumInfo:
     name: str
     value: object
@@ -47,34 +53,34 @@ class OneofInfo:
 
 
 @dataclass()
-class MessageInfo:
-    # dependencies: t.Set[ModuleInfo] = field(default_factory=set)
+class MessageInfo(CodeBlock):
     enums: t.MutableSequence[EnumInfo] = field(default_factory=list)
     fields: t.MutableSequence[FieldInfo] = field(default_factory=list)
     oneofs: t.MutableSequence[OneofInfo] = field(default_factory=list)
     # maps: t.MutableMapping[MapInfo] = field(default_factory=dict)
-    body: t.MutableSequence[ast.stmt] = field(default_factory=list)
 
 
 @dataclass()
-class ServicerInfo:
-    # dependencies: t.Set[ModuleInfo] = field(default_factory=set)
-    body: t.MutableSequence[ast.stmt] = field(default_factory=list)
+class ServicerInfo(CodeBlock):
+    pass
 
 
 @dataclass()
-class StubInfo:
-    # dependencies: t.Set[ModuleInfo] = field(default_factory=set)
-    body: t.MutableSequence[ast.stmt] = field(default_factory=list)
+class StubInfo(CodeBlock):
+    pass
+
+
+@dataclass()
+class GRPCInfo:
+    servicer: ServicerInfo = field(default_factory=ServicerInfo)
+    stub: StubInfo = field(default_factory=StubInfo)
 
 
 @dataclass()
 class ScopeInfo:
     name: str
-    dependencies: t.Set[ModuleInfo] = field(default_factory=set)
     message: MessageInfo = field(default_factory=MessageInfo)
-    servicer: ServicerInfo = field(default_factory=ServicerInfo)
-    stub: StubInfo = field(default_factory=StubInfo)
+    grpc: GRPCInfo = field(default_factory=GRPCInfo)
 
 
 class ScopeProtoVisitorDecorator(ProtoVisitorDecorator):
@@ -133,8 +139,4 @@ class ScopeProtoVisitorDecorator(ProtoVisitorDecorator):
         self.__stack.put(ScopeInfo(name=proto.name))
 
     def __leave(self) -> None:
-        leaving = self.__stack.pop()
-
-        if self.__stack:
-            parent = self.__stack.get_last()
-            parent.dependencies.update(leaving.dependencies)
+        self.__stack.pop()

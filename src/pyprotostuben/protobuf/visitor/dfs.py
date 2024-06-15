@@ -15,10 +15,7 @@ from pyprotostuben.protobuf.visitor.decorator import ProtoVisitorDecorator
 
 
 class DFSWalkingProtoVisitor(ProtoVisitor, LoggerMixin):
-    def __init__(
-        self,
-        *nested: ProtoVisitorDecorator,
-    ) -> None:
+    def __init__(self, *nested: ProtoVisitorDecorator) -> None:
         self.__nested = nested
 
     def visit_file_descriptor_proto(self, proto: FileDescriptorProto) -> None:

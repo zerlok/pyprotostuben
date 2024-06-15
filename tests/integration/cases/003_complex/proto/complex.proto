@@ -48,9 +48,15 @@ message MessageWithMultipleOneOfs {
   }
 }
 
+message CombinedMessage {
+  repeated Message1 msg1 = 1;
+  optional Message2 msg2 = 2;
+  repeated MessageOptional opt = 3;
+  optional NestedRoot root = 4;
 
-//
-//service RequestService {
-//  rpc Do(Request) returns (Event) {}
-//  rpc Stream(stream Request) returns (stream Event) {}
-//}
+}
+
+service Complex {
+  rpc UnaryUnary(Message1) returns (CombinedMessage) {}
+  rpc StreamStream(stream Message2) returns (stream CombinedMessage) {}
+}

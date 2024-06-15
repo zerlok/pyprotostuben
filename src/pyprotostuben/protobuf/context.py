@@ -1,6 +1,7 @@
 import typing as t
 from dataclasses import dataclass
 
+from google.protobuf.compiler.plugin_pb2 import CodeGeneratorRequest
 from google.protobuf.descriptor_pb2 import (
     FileDescriptorProto,
     EnumDescriptorProto,
@@ -14,7 +15,8 @@ from google.protobuf.descriptor_pb2 import (
 
 from pyprotostuben.logging import LoggerMixin
 from pyprotostuben.protobuf.file import ProtoFile
-from pyprotostuben.protobuf.types.registry import TypeRegistry
+from pyprotostuben.protobuf.parser import Parameters, ParameterParser
+from pyprotostuben.protobuf.registry import TypeRegistry
 from pyprotostuben.protobuf.visitor.abc import Proto, visit, ProtoVisitor
 from pyprotostuben.protobuf.visitor.decorator import EnterProtoVisitorDecorator
 from pyprotostuben.protobuf.visitor.dfs import DFSWalkingProtoVisitor
@@ -24,14 +26,18 @@ from pyprotostuben.stack import MutableStack, Stack
 
 
 @dataclass(frozen=True)
-class Context:
-    files: t.Mapping[str, ProtoFile]
+class CodeGeneratorContext:
+    request: CodeGeneratorRequest
+    params: Parameters
+    files: t.Sequence[ProtoFile]
+    file_registry: t.Mapping[str, ProtoFile]
     type_registry: TypeRegistry
 
 
 class ContextBuilder(ProtoVisitor, LoggerMixin):
     @classmethod
-    def build(cls, protos: t.Sequence[Proto]) -> Context:
+    def build(cls, request: CodeGeneratorRequest) -> CodeGeneratorContext:
+        parser = ParameterParser()
         file_stack: MutableStack[ProtoFile] = MutableStack()
         proto_stack: MutableStack[Proto] = MutableStack()
         file_registry: t.Dict[str, ProtoFile] = {}
@@ -43,11 +49,14 @@ class ContextBuilder(ProtoVisitor, LoggerMixin):
                 ProtoStackVisitorDecorator(proto_stack),
                 EnterProtoVisitorDecorator(cls(file_stack, proto_stack, file_registry, type_registry)),
             ),
-            *protos,
+            *request.proto_file,
         )
 
-        return Context(
-            files=file_registry,
+        return CodeGeneratorContext(
+            request=request,
+            params=parser.parse(request.parameter),
+            files=[file_registry[file.name] for file in request.proto_file],
+            file_registry=file_registry,
             type_registry=TypeRegistry(type_registry),
         )
 

@@ -5,8 +5,8 @@ from google.protobuf.compiler.plugin_pb2 import CodeGeneratorRequest, CodeGenera
 from google.protobuf.json_format import MessageToJson
 
 from pyprotostuben.codegen.abc import CodeGenerator
-from pyprotostuben.codegen.parser import ParameterParser
 from pyprotostuben.logging import LoggerMixin
+from pyprotostuben.protobuf.parser import ParameterParser
 
 
 class RequestEchoCodeGenerator(CodeGenerator, LoggerMixin):

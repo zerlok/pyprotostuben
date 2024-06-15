@@ -12,7 +12,7 @@ from pyprotostuben.codegen.abc import CodeGenerator
 from pyprotostuben.codegen.mypy.generator import MypyStubCodeGenerator
 
 CASES_DIR = Path(__file__).parent / "cases"
-CASES = [pytest.param(path, id=str(path.relative_to(CASES_DIR))) for path in CASES_DIR.iterdir()]
+CASES = [pytest.param(path, id=str(path.relative_to(CASES_DIR))) for path in sorted(CASES_DIR.iterdir())]
 
 
 @dataclass(frozen=True)
@@ -28,12 +28,12 @@ def case(request: SubRequest, tmp_path: Path) -> Case:
     proto_dir = case_dir / "proto"
     expected_gen_dir = case_dir / "expected_gen"
 
-    request = _read_request(proto_dir, tmp_path)
-    request.parameter = "no-parallel"  # for easier debug
+    gen_request = _read_request(proto_dir, tmp_path)
+    gen_request.parameter = "no-parallel"  # for easier debug
 
     return Case(
         generator=MypyStubCodeGenerator(),
-        request=request,
+        request=gen_request,
         gen_expected_files=[
             CodeGeneratorResponse.File(
                 name=str(path.relative_to(expected_gen_dir)),

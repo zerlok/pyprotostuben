@@ -6,6 +6,7 @@ from google.protobuf.descriptor_pb2 import (
     DescriptorProto,
     EnumDescriptorProto,
     MethodDescriptorProto,
+    ServiceDescriptorProto,
 )
 
 T_co = t.TypeVar("T_co")
@@ -62,6 +63,14 @@ class TypeResolver(t.Generic[T_co], metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def resolve_protobuf_field(self, proto: FieldDescriptorProto) -> T_co:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def resolve_grpc_server(self, proto: ServiceDescriptorProto) -> T_co:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def resolve_grpc_channel(self, proto: ServiceDescriptorProto) -> T_co:
         raise NotImplementedError()
 
     @abc.abstractmethod
