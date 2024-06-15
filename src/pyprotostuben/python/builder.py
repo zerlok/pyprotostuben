@@ -9,14 +9,22 @@ from pyprotostuben.python.info import NamespaceInfo, ModuleInfo
 
 @dataclass(frozen=True)
 class FuncArgInfo:
+    @classmethod
+    def create_pos(cls, name: str, annotation: ast.expr, default: t.Optional[ast.expr] = None) -> "FuncArgInfo":
+        return cls(name=name, kind=cls.Kind.POS, annotation=annotation, default=default)
+
+    @classmethod
+    def create_kw(cls, name: str, annotation: ast.expr, default: t.Optional[ast.expr] = None) -> "FuncArgInfo":
+        return cls(name=name, kind=cls.Kind.KW_ONLY, annotation=annotation, default=default)
+
     class Kind(enum.Enum):
         POS = enum.auto()
         KW_ONLY = enum.auto()
 
     name: str
-    kind: Kind = Kind.POS
-    annotation: t.Optional[ast.expr] = None
-    default: t.Optional[ast.expr] = None
+    kind: Kind
+    annotation: t.Optional[ast.expr]
+    default: t.Optional[ast.expr]
 
 
 def build_module(code: CodeBlock) -> ast.Module:
@@ -123,7 +131,7 @@ def build_method_stub(
     return build_func_stub(
         name=name,
         decorators=decorators,
-        args=[FuncArgInfo("self"), *(args or [])],
+        args=[FuncArgInfo(name="self", kind=FuncArgInfo.Kind.POS, annotation=None, default=None), *(args or [])],
         returns=returns,
         is_async=is_async,
     )

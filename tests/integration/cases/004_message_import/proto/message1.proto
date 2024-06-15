@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+package message_import;
+
+message Message1 {
+  string s = 1;
+}

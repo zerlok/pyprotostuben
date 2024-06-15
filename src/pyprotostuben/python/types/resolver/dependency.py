@@ -24,6 +24,21 @@ class ModuleDependencyResolver(TypeResolver[NamespaceInfo], LoggerMixin):
         self.__module = module
         self.__deps = deps
 
+    def resolve_bytes(self) -> NamespaceInfo:
+        return self.__resolve(self.__inner.resolve_bytes())
+
+    def resolve_bool(self) -> NamespaceInfo:
+        return self.__resolve(self.__inner.resolve_bool())
+
+    def resolve_int(self) -> NamespaceInfo:
+        return self.__resolve(self.__inner.resolve_int())
+
+    def resolve_float(self) -> NamespaceInfo:
+        return self.__resolve(self.__inner.resolve_float())
+
+    def resolve_str(self) -> NamespaceInfo:
+        return self.__resolve(self.__inner.resolve_str())
+
     def resolve_final(self) -> NamespaceInfo:
         return self.__resolve(self.__inner.resolve_final())
 
@@ -54,6 +69,9 @@ class ModuleDependencyResolver(TypeResolver[NamespaceInfo], LoggerMixin):
     def resolve_mapping(self) -> NamespaceInfo:
         return self.__resolve(self.__inner.resolve_mapping())
 
+    def resolve_async_iterator(self) -> NamespaceInfo:
+        return self.__resolve(self.__inner.resolve_async_iterator())
+
     def resolve_protobuf_enum_base(self, proto: EnumDescriptorProto) -> NamespaceInfo:
         return self.__resolve(self.__inner.resolve_protobuf_enum_base(proto))
 
@@ -63,14 +81,41 @@ class ModuleDependencyResolver(TypeResolver[NamespaceInfo], LoggerMixin):
     def resolve_protobuf_field(self, proto: FieldDescriptorProto) -> NamespaceInfo:
         return self.__resolve(self.__inner.resolve_protobuf_field(proto))
 
-    def resolve_grpc_servicer_context(self, proto: MethodDescriptorProto) -> NamespaceInfo:
-        return self.__resolve(self.__inner.resolve_grpc_servicer_context(proto))
-
     def resolve_grpc_server(self, proto: ServiceDescriptorProto) -> NamespaceInfo:
         return self.__resolve(self.__inner.resolve_grpc_server(proto))
 
     def resolve_grpc_channel(self, proto: ServiceDescriptorProto) -> NamespaceInfo:
         return self.__resolve(self.__inner.resolve_grpc_channel(proto))
+
+    def resolve_grpc_servicer_context(self, proto: MethodDescriptorProto) -> NamespaceInfo:
+        return self.__resolve(self.__inner.resolve_grpc_servicer_context(proto))
+
+    def resolve_grpc_stub_timeout(self, proto: MethodDescriptorProto) -> NamespaceInfo:
+        return self.__resolve(self.__inner.resolve_grpc_stub_timeout(proto))
+
+    def resolve_grpc_stub_metadata_type(self, proto: MethodDescriptorProto) -> NamespaceInfo:
+        return self.__resolve(self.__inner.resolve_grpc_stub_metadata_type(proto))
+
+    def resolve_grpc_stub_credentials(self, proto: MethodDescriptorProto) -> NamespaceInfo:
+        return self.__resolve(self.__inner.resolve_grpc_stub_credentials(proto))
+
+    def resolve_grpc_stub_wait_for_ready(self, proto: MethodDescriptorProto) -> NamespaceInfo:
+        return self.__resolve(self.__inner.resolve_grpc_stub_wait_for_ready(proto))
+
+    def resolve_grpc_stub_compression(self, proto: MethodDescriptorProto) -> NamespaceInfo:
+        return self.__resolve(self.__inner.resolve_grpc_stub_compression(proto))
+
+    def resolve_grpc_stub_unary_unary_call(self, proto: MethodDescriptorProto) -> NamespaceInfo:
+        return self.__resolve(self.__inner.resolve_grpc_stub_unary_unary_call(proto))
+
+    def resolve_grpc_stub_unary_stream_call(self, proto: MethodDescriptorProto) -> NamespaceInfo:
+        return self.__resolve(self.__inner.resolve_grpc_stub_unary_stream_call(proto))
+
+    def resolve_grpc_stub_stream_unary_call(self, proto: MethodDescriptorProto) -> NamespaceInfo:
+        return self.__resolve(self.__inner.resolve_grpc_stub_stream_unary_call(proto))
+
+    def resolve_grpc_stub_stream_stream_call(self, proto: MethodDescriptorProto) -> NamespaceInfo:
+        return self.__resolve(self.__inner.resolve_grpc_stub_stream_stream_call(proto))
 
     def resolve_grpc_method_input(self, proto: MethodDescriptorProto) -> NamespaceInfo:
         return self.__resolve(self.__inner.resolve_grpc_method_input(proto))

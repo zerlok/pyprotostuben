@@ -21,25 +21,28 @@ def _iter_field_type_enum() -> t.Iterable[FieldDescriptorProto.Type.ValueType]:
 
 class TypeRegistry(TypeResolver[TypeInfo]):
     def __init__(self, custom: t.Mapping[str, TypeInfo]) -> None:
-        int_info = TypeInfo(self.builtins_module, "int")
-        float_info = TypeInfo(self.builtins_module, "float")
+        self.__bytes_info = TypeInfo(self.builtins_module, "bytes")
+        self.__bool_info = TypeInfo(self.builtins_module, "bool")
+        self.__int_info = TypeInfo(self.builtins_module, "int")
+        self.__float_info = TypeInfo(self.builtins_module, "float")
+        self.__str_info = TypeInfo(self.builtins_module, "str")
 
         self.__builtin: t.Dict[FieldDescriptorProto.Type.ValueType, TypeInfo] = {
-            FieldDescriptorProto.TYPE_BYTES: TypeInfo(self.builtins_module, "bytes"),
-            FieldDescriptorProto.TYPE_BOOL: TypeInfo(self.builtins_module, "bool"),
-            FieldDescriptorProto.TYPE_INT32: int_info,
-            FieldDescriptorProto.TYPE_INT64: int_info,
-            FieldDescriptorProto.TYPE_UINT32: int_info,
-            FieldDescriptorProto.TYPE_UINT64: int_info,
-            FieldDescriptorProto.TYPE_SINT32: int_info,
-            FieldDescriptorProto.TYPE_SINT64: int_info,
-            FieldDescriptorProto.TYPE_FIXED32: int_info,
-            FieldDescriptorProto.TYPE_FIXED64: int_info,
-            FieldDescriptorProto.TYPE_SFIXED32: int_info,
-            FieldDescriptorProto.TYPE_SFIXED64: int_info,
-            FieldDescriptorProto.TYPE_FLOAT: float_info,
-            FieldDescriptorProto.TYPE_DOUBLE: float_info,
-            FieldDescriptorProto.TYPE_STRING: TypeInfo(self.builtins_module, "str"),
+            FieldDescriptorProto.TYPE_BYTES: self.__bytes_info,
+            FieldDescriptorProto.TYPE_BOOL: self.__bool_info,
+            FieldDescriptorProto.TYPE_INT32: self.__int_info,
+            FieldDescriptorProto.TYPE_INT64: self.__int_info,
+            FieldDescriptorProto.TYPE_UINT32: self.__int_info,
+            FieldDescriptorProto.TYPE_UINT64: self.__int_info,
+            FieldDescriptorProto.TYPE_SINT32: self.__int_info,
+            FieldDescriptorProto.TYPE_SINT64: self.__int_info,
+            FieldDescriptorProto.TYPE_FIXED32: self.__int_info,
+            FieldDescriptorProto.TYPE_FIXED64: self.__int_info,
+            FieldDescriptorProto.TYPE_SFIXED32: self.__int_info,
+            FieldDescriptorProto.TYPE_SFIXED64: self.__int_info,
+            FieldDescriptorProto.TYPE_FLOAT: self.__float_info,
+            FieldDescriptorProto.TYPE_DOUBLE: self.__float_info,
+            FieldDescriptorProto.TYPE_STRING: self.__str_info,
         }
 
         self.__custom_types = {
@@ -52,6 +55,21 @@ class TypeRegistry(TypeResolver[TypeInfo]):
             set(_iter_field_type_enum()) - (self.__builtin.keys() | self.__custom_types)
         ) == set(), "not all possible field types are covered"
         assert self.__builtin.keys() & self.__custom_types == set(), "field type should be either builtin or a custom"
+
+    def resolve_bytes(self) -> TypeInfo:
+        return self.__bool_info
+
+    def resolve_bool(self) -> TypeInfo:
+        return self.__bool_info
+
+    def resolve_int(self) -> TypeInfo:
+        return self.__int_info
+
+    def resolve_float(self) -> TypeInfo:
+        return self.__float_info
+
+    def resolve_str(self) -> TypeInfo:
+        return self.__str_info
 
     @ft.lru_cache(1)
     def resolve_final(self) -> TypeInfo:
@@ -93,6 +111,10 @@ class TypeRegistry(TypeResolver[TypeInfo]):
     def resolve_mapping(self) -> TypeInfo:
         return TypeInfo(self.typing_module, "Mapping")
 
+    @ft.lru_cache(1)
+    def resolve_async_iterator(self) -> TypeInfo:
+        return TypeInfo(self.typing_module, "AsyncIterator")
+
     def resolve_protobuf_enum_base(self, proto: EnumDescriptorProto) -> TypeInfo:
         return self.int_enum_cls
 
@@ -108,13 +130,40 @@ class TypeRegistry(TypeResolver[TypeInfo]):
         return self.__custom[proto.type_name]
 
     def resolve_grpc_server(self, proto: ServiceDescriptorProto) -> TypeInfo:
-        return TypeInfo.create(self.grpc_module, "Server")
+        return TypeInfo.create(self.grpc_aio_module, "Server")
 
     def resolve_grpc_channel(self, proto: ServiceDescriptorProto) -> TypeInfo:
-        return TypeInfo.create(self.grpc_module, "Channel")
+        return TypeInfo.create(self.grpc_aio_module, "Channel")
 
     def resolve_grpc_servicer_context(self, proto: MethodDescriptorProto) -> TypeInfo:
-        return TypeInfo.create(self.grpc_module, "ServicerContext")
+        return TypeInfo.create(self.grpc_aio_module, "ServicerContext")
+
+    def resolve_grpc_stub_timeout(self, proto: MethodDescriptorProto) -> TypeInfo:
+        return self.__float_info
+
+    def resolve_grpc_stub_metadata_type(self, proto: MethodDescriptorProto) -> TypeInfo:
+        return TypeInfo.create(self.grpc_aio_module, "MetadataType")
+
+    def resolve_grpc_stub_credentials(self, proto: MethodDescriptorProto) -> TypeInfo:
+        return TypeInfo.create(self.grpc_module, "CallCredentials")
+
+    def resolve_grpc_stub_wait_for_ready(self, proto: MethodDescriptorProto) -> TypeInfo:
+        return self.__bool_info
+
+    def resolve_grpc_stub_compression(self, proto: MethodDescriptorProto) -> TypeInfo:
+        return TypeInfo.create(self.grpc_module, "Compression")
+
+    def resolve_grpc_stub_unary_unary_call(self, proto: MethodDescriptorProto) -> TypeInfo:
+        return TypeInfo.create(self.grpc_aio_module, "UnaryUnaryCall")
+
+    def resolve_grpc_stub_unary_stream_call(self, proto: MethodDescriptorProto) -> TypeInfo:
+        return TypeInfo.create(self.grpc_aio_module, "UnaryStreamCall")
+
+    def resolve_grpc_stub_stream_unary_call(self, proto: MethodDescriptorProto) -> TypeInfo:
+        return TypeInfo.create(self.grpc_aio_module, "StreamUnaryCall")
+
+    def resolve_grpc_stub_stream_stream_call(self, proto: MethodDescriptorProto) -> TypeInfo:
+        return TypeInfo.create(self.grpc_aio_module, "StreamStreamCall")
 
     def resolve_grpc_method_input(self, proto: MethodDescriptorProto) -> TypeInfo:
         return self.__custom[proto.input_type]
@@ -140,6 +189,10 @@ class TypeRegistry(TypeResolver[TypeInfo]):
 
     @ft.cached_property
     def grpc_module(self) -> ModuleInfo:
+        return ModuleInfo(None, "grpc")
+
+    @ft.cached_property
+    def grpc_aio_module(self) -> ModuleInfo:
         return ModuleInfo(PackageInfo(None, "grpc"), "aio")
 
     @ft.cached_property

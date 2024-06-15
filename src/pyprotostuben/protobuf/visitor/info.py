@@ -18,7 +18,7 @@ from pyprotostuben.python.info import TypeInfo, ModuleInfo, NamespaceInfo
 from pyprotostuben.stack import MutableStack
 
 
-class NamespaceInfoVisitor(ProtoVisitorDecorator, LoggerMixin):
+class NamespaceInfoVisitorDecorator(ProtoVisitorDecorator, LoggerMixin):
     def __init__(self, stack: MutableStack[NamespaceInfo]) -> None:
         self.__stack = stack
 

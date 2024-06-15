@@ -32,7 +32,7 @@ from pyprotostuben.protobuf.registry import TypeRegistry
 from pyprotostuben.protobuf.visitor.abc import ProtoVisitor, visit
 from pyprotostuben.protobuf.visitor.decorator import LeaveProtoVisitorDecorator
 from pyprotostuben.protobuf.visitor.dfs import DFSWalkingProtoVisitor
-from pyprotostuben.protobuf.visitor.info import NamespaceInfoVisitor
+from pyprotostuben.protobuf.visitor.info import NamespaceInfoVisitorDecorator
 from pyprotostuben.python.builder import build_enum_class_def
 from pyprotostuben.python.info import NamespaceInfo
 from pyprotostuben.python.types.resolver.dependency import ModuleDependencyResolver
@@ -52,7 +52,7 @@ class ModuleASTGeneratorStrategy(Strategy, LoggerMixin):
         modules: t.Dict[Path, ast.Module] = {}
 
         visitor = DFSWalkingProtoVisitor(
-            NamespaceInfoVisitor(namespaces),
+            NamespaceInfoVisitorDecorator(namespaces),
             ScopeProtoVisitorDecorator(scopes),
             LeaveProtoVisitorDecorator(
                 ModuleASTGenerator(
@@ -157,8 +157,8 @@ class ModuleASTGenerator(ProtoVisitor):
                 *message.body,
                 builder.build_message_init_def(message.fields),
                 *builder.build_message_field_defs(message.fields),
-                builder.build_message_method_has_field_def(message.fields),
-                *builder.build_message_method_which_oneof_defs(message.oneofs),
+                builder.build_message_has_field_def(message.fields),
+                *builder.build_message_which_oneof_defs(message.oneofs),
             ],
         )
 
@@ -203,7 +203,7 @@ class ModuleASTGenerator(ProtoVisitor):
             return
 
         builder = self.create_grpc_servicer_builder()
-        servicer_class_def = builder.build_servicer_def(proto, [])
+        servicer_class_def = builder.build_servicer_def(proto, info.body)
         servicer_registrator_def = builder.build_servicer_registrator_def(proto)
 
         self.parent_scope.grpc.servicer.body.extend([servicer_class_def, servicer_registrator_def])
@@ -217,45 +217,33 @@ class ModuleASTGenerator(ProtoVisitor):
             proto=proto,
             body=[
                 builder.build_stub_init_def(proto),
-                *self.current_scope.grpc.stub.body,
+                *info.body,
             ],
         )
 
         self.parent_scope.grpc.stub.body.append(stub_class_def)
 
     def visit_method_descriptor_proto(self, proto: MethodDescriptorProto) -> None:
-        # self.__build_method_servicer(proto)
-        # self.__build_method_stub(proto)
-        pass
+        self.__build_method_servicer(proto)
+        self.__build_method_stub(proto)
 
-    # def __build_method_servicer(self, proto: MethodDescriptorProto) -> None:
-    #     builder = self.create_grpc_servicer_builder()
-    #     method_def = builder.build_method_stub(
-    #         name=proto.name,
-    #         decorators=[builder.resolve_abstract_method()],
-    #         args=[
-    #             FuncArgInfo(name="request", annotation=input_type),
-    #             FuncArgInfo(name="context", annotation=resolver.resolve_grpc_servicer_context(proto)),
-    #         ],
-    #         returns=output_type,
-    #         is_async=True,
-    #     )
-    #     self.parent_scope.grpc.body.append()
-    #
-    # def __build_method_stub(self, proto: MethodDescriptorProto) -> None:
-    #     self.parent_scope.stub.body.append(
-    #         self.__ast.build_method_stub(
-    #             name=proto.name,
-    #             args=[
-    #                 FuncArgInfo(name="request", annotation=input_type),
-    #             ],
-    #             returns=output_type,
-    #             is_async=True,
-    #         )
-    #     )
+    def __build_method_servicer(self, proto: MethodDescriptorProto) -> None:
+        builder = self.create_grpc_servicer_builder()
+        method_def = builder.build_servicer_method_def(proto)
+
+        self.parent_scope.grpc.servicer.body.append(method_def)
+
+    def __build_method_stub(self, proto: MethodDescriptorProto) -> None:
+        builder = self.create_grpc_stub_builder()
+        method_def = builder.build_stub_method_def(proto)
+
+        self.parent_scope.grpc.stub.body.append(method_def)
 
     def __build_module(self, *blocks: CodeBlock) -> ast.Module:
-        dependencies = sorted(it.chain.from_iterable(block.dependencies for block in blocks), key=lambda m: m.qualname)
+        dependencies = sorted(
+            set(it.chain.from_iterable(block.dependencies for block in blocks)),
+            key=lambda m: m.qualname,
+        )
         body = list(
             it.chain(
                 (ast.Import(names=[ast.alias(name=module.qualname)]) for module in dependencies),

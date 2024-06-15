@@ -1,9 +1,0 @@
-syntax = "proto3";
-
-package external;
-
-import "complex.proto";
-
-message MessageWithExternalDependency {
-  repeated complex.Message2 extmsg2 = 1;
-}

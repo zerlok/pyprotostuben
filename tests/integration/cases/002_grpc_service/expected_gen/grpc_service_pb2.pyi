@@ -2,7 +2,7 @@ import builtins
 import google.protobuf.message
 import typing
 
-class SpamRequest(google.protobuf.message.Message):
+class Request(google.protobuf.message.Message):
 
     def __init__(self, *, eggs: builtins.str) -> None:...
 
@@ -13,7 +13,7 @@ class SpamRequest(google.protobuf.message.Message):
 
     def WhichOneof(self, oneof_group: typing.NoReturn) -> typing.NoReturn:...
 
-class SpamResponse(google.protobuf.message.Message):
+class Response(google.protobuf.message.Message):
 
     def __init__(self, *, banana: builtins.str) -> None:...
 

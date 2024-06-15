@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package message_import;
+
+import "message1.proto";
+
+message Message2 {
+  message_import.Message1 m1 = 1;
+}
