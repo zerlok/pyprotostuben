@@ -12,14 +12,13 @@ protoc-gen-echo = "pyprotostuben.protoc:echo"
 [tool.poetry.dependencies]
 python = "^3.9"
 protobuf = "^5.26.1"
-ruff = "^0.4.8"
 
 [tool.poetry.group.dev.dependencies]
 types-protobuf = "^5.26.0.20240422"
 mypy = "^1.10.0"
 pytest = "^8.2.0"
 pytest-cov = "^5.0.0"
-ruff = "^0.4.8"
+ruff = "^0.4.9"
 
 [build-system]
 requires = ["poetry-core"]
@@ -32,7 +31,3 @@ line-length = 120
 [tool.mypy]
 files = ["src", "tests"]
 strict = true
-
-[[tool.mypy.overrides]]
-module = ["tests.integration.cases.*"]
-ignore_errors = true
