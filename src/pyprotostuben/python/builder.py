@@ -3,7 +3,6 @@ import enum
 import typing as t
 from dataclasses import dataclass
 
-from pyprotostuben.codegen.mypy.info import CodeBlock
 from pyprotostuben.python.info import NamespaceInfo, ModuleInfo
 
 
@@ -25,19 +24,6 @@ class FuncArgInfo:
     kind: Kind
     annotation: t.Optional[ast.expr]
     default: t.Optional[ast.expr]
-
-
-def build_module(code: CodeBlock) -> ast.Module:
-    return ast.Module(
-        body=[
-            *(
-                ast.Import(names=[ast.alias(name=module.qualname)])
-                for module in sorted(code.dependencies, key=lambda x: x.qualname)
-            ),
-            *code.body,
-        ],
-        type_ignores=[],
-    )
 
 
 def build_func_stub(

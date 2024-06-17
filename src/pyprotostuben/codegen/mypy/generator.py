@@ -23,15 +23,15 @@ class MypyStubCodeGenerator(CodeGenerator, LoggerMixin):
         log.debug("request received")
 
         context = ContextBuilder.build(request)
+        params = ParameterParser().parse(request.parameter)
+        strategy = ModuleASTGeneratorStrategy(context.registry)
 
         with ExitStack() as cm_stack:
-            params = ParameterParser().parse(request.parameter)
             pool = (
                 SingleProcessPool()
                 if params.has_flag("no-parallel") or params.has_flag("debug")
                 else cm_stack.enter_context(MultiProcessPool.setup())
             )
-            strategy = ModuleASTGeneratorStrategy(context.type_registry)
 
             resp = CodeGeneratorResponse(
                 supported_features=CodeGeneratorResponse.Feature.FEATURE_PROTO3_OPTIONAL,
