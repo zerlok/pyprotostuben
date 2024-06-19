@@ -2,7 +2,7 @@ import ast
 import typing as t
 from dataclasses import dataclass
 
-from google.protobuf.descriptor_pb2 import FieldDescriptorProto, MethodDescriptorProto
+from google.protobuf.descriptor_pb2 import FieldDescriptorProto
 
 from pyprotostuben.python.builder import build_attr, build_generic_ref
 
