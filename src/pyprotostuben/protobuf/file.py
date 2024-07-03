@@ -1,5 +1,5 @@
-import typing as t
 import functools as ft
+import typing as t
 from pathlib import Path
 
 from google.protobuf.descriptor_pb2 import FileDescriptorProto
@@ -39,8 +39,8 @@ class ProtoFile:
 
     @ft.cached_property
     def pb2_message(self) -> ModuleInfo:
-        return ModuleInfo(self.pb2_package, f"{self.proto_path.stem}_pb2")
+        return ModuleInfo(self.pb2_package, f"{self.name}_pb2")
 
     @ft.cached_property
     def pb2_grpc(self) -> ModuleInfo:
-        return ModuleInfo(self.pb2_package, f"{self.proto_path.stem}_pb2_grpc")
+        return ModuleInfo(self.pb2_package, f"{self.name}_pb2_grpc")

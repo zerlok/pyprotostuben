@@ -16,10 +16,16 @@ from google.protobuf.descriptor_pb2 import (
 from pyprotostuben.logging import LoggerMixin
 from pyprotostuben.protobuf.file import ProtoFile
 from pyprotostuben.protobuf.parser import Parameters, ParameterParser
-from pyprotostuben.protobuf.registry import ProtoInfo, MapEntryInfo, MessageInfo, EnumInfo, TypeRegistry
+from pyprotostuben.protobuf.registry import (
+    MessageInfo,
+    EnumInfo,
+    TypeRegistry,
+    MapEntryPlaceholder,
+)
 from pyprotostuben.protobuf.visitor.abc import Proto, visit
 from pyprotostuben.protobuf.visitor.decorator import ProtoVisitorDecorator
 from pyprotostuben.protobuf.visitor.dfs import DFSWalkingProtoVisitor
+from pyprotostuben.python.info import ModuleInfo
 from pyprotostuben.stack import MutableStack
 
 
@@ -36,37 +42,29 @@ class ContextBuilder(ProtoVisitorDecorator, LoggerMixin):
     def build(cls, request: CodeGeneratorRequest) -> CodeGeneratorContext:
         parser = ParameterParser()
         files: t.Dict[str, ProtoFile] = {}
-        infos: t.Dict[str, ProtoInfo] = {}
+        infos: t.Dict[str, t.Union[EnumInfo, MessageInfo]] = {}
+        map_entries: t.Dict[str, MapEntryPlaceholder] = {}
 
-        visit(
-            DFSWalkingProtoVisitor(
-                # ProtoFileStackVisitorDecorator(file_stack),
-                # ProtoStackVisitorDecorator(proto_stack),
-                cls(files, infos),
-            ),
-            *request.proto_file,
-        )
+        visit(DFSWalkingProtoVisitor(cls(files, infos, map_entries)), *request.proto_file)
 
         return CodeGeneratorContext(
             request=request,
             params=parser.parse(request.parameter),
             files=[files[file.name] for file in request.proto_file],
-            registry=TypeRegistry(infos),
+            registry=TypeRegistry(infos, map_entries),
         )
 
     def __init__(
         self,
-        files: t.Dict[str, ProtoFile],
-        infos: t.Dict[str, ProtoInfo],
+        files: t.MutableMapping[str, ProtoFile],
+        infos: t.MutableMapping[str, t.Union[EnumInfo, MessageInfo]],
+        map_entries: t.MutableMapping[str, MapEntryPlaceholder],
     ) -> None:
         self.__file_stack: MutableStack[ProtoFile] = MutableStack()
         self.__proto_stack: MutableStack[Proto] = MutableStack()
         self.__files = files
         self.__infos = infos
-
-    @property
-    def file(self) -> ProtoFile:
-        return self.__file_stack.get_last()
+        self.__map_entries = map_entries
 
     def enter_file_descriptor_proto(self, proto: FileDescriptorProto) -> None:
         file = ProtoFile(proto)
@@ -130,28 +128,29 @@ class ContextBuilder(ProtoVisitorDecorator, LoggerMixin):
         self.__proto_stack.pop()
 
     def __register_enum(self) -> None:
-        qualname, parts = self.__build_type_ref()
-        info = self.__infos[qualname] = EnumInfo(parts)
+        qualname, module, ns = self.__build_type()
+        info = self.__infos[qualname] = EnumInfo(module, ns)
 
         self._log.info("registered", qualname=qualname, info=info)
 
     def __register_message(self) -> None:
-        qualname, parts = self.__build_type_ref()
-        info = self.__infos[qualname] = MessageInfo(parts)
+        qualname, module, ns = self.__build_type()
+        info = self.__infos[qualname] = MessageInfo(module, ns)
 
         self._log.info("registered", qualname=qualname, info=info)
 
     def __register_map_entry(self, key: FieldDescriptorProto, value: FieldDescriptorProto) -> None:
-        qualname, parts = self.__build_type_ref()
-        info = self.__infos[qualname] = MapEntryInfo(key=key, value=value)
+        qualname, module, _ = self.__build_type()
+        placeholder = self.__map_entries[qualname] = MapEntryPlaceholder(module, key, value)
 
-        self._log.info("registered", qualname=qualname, info=info)
+        self._log.info("registered", qualname=qualname, placeholder=placeholder)
 
-    def __build_type_ref(self) -> t.Tuple[str, t.Sequence[str]]:
+    def __build_type(self) -> t.Tuple[str, ModuleInfo, t.Sequence[str]]:
+        file = self.__file_stack.get_last()
         ns = [desc.name for desc in self.__proto_stack]
         proto_path = ".".join(ns)
 
-        return f".{self.file.descriptor.package}.{proto_path}", [*self.file.pb2_message.parts, *ns]
+        return f".{file.descriptor.package}.{proto_path}", file.pb2_message, ns
 
     def __find_field_by_name(self, fields: t.Sequence[FieldDescriptorProto], name: str) -> FieldDescriptorProto:
         for field in fields:

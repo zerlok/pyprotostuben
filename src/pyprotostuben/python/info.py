@@ -45,6 +45,11 @@ class PackageInfo(NamespaceInfo):
 class ModuleInfo(NamespaceInfo):
     parent: t.Optional[PackageInfo]
 
+    @classmethod
+    def from_str(cls, ref: str) -> "ModuleInfo":
+        *other, last = ref.split(".")
+        return ModuleInfo(PackageInfo.build_or_none(*other), last)
+
     @property
     def package(self) -> t.Optional[PackageInfo]:
         return self.parent
@@ -58,3 +63,13 @@ class ModuleInfo(NamespaceInfo):
     @ft.cached_property
     def stub_file(self) -> Path:
         return self.file.with_suffix(".pyi")
+
+
+@dataclass(frozen=True)
+class TypeInfo:
+    module: t.Optional[ModuleInfo]
+    ns: t.Sequence[str]
+
+    @classmethod
+    def build(cls, module: t.Optional[ModuleInfo], *ns: str) -> "TypeInfo":
+        return cls(module, ns)

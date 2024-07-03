@@ -8,8 +8,8 @@ import pytest
 from _pytest.fixtures import SubRequest
 from google.protobuf.compiler.plugin_pb2 import CodeGeneratorRequest, CodeGeneratorResponse
 
-from pyprotostuben.codegen.abc import CodeGenerator
-from pyprotostuben.codegen.mypy.generator import MypyStubCodeGenerator
+from pyprotostuben.codegen.abc import ProtocPlugin
+from pyprotostuben.codegen.mypy.plugin import MypyStubProtocPlugin
 
 CASES_DIR = Path(__file__).parent / "cases"
 CASES = [pytest.param(path, id=str(path.relative_to(CASES_DIR))) for path in sorted(CASES_DIR.iterdir())]
@@ -17,7 +17,7 @@ CASES = [pytest.param(path, id=str(path.relative_to(CASES_DIR))) for path in sor
 
 @dataclass(frozen=True)
 class Case:
-    generator: CodeGenerator
+    generator: ProtocPlugin
     request: CodeGeneratorRequest
     gen_expected_files: t.Sequence[CodeGeneratorResponse.File]
 
@@ -32,7 +32,7 @@ def case(request: SubRequest, tmp_path: Path) -> Case:
     gen_request.parameter = "no-parallel"  # for easier debug
 
     return Case(
-        generator=MypyStubCodeGenerator(),
+        generator=MypyStubProtocPlugin(),
         request=gen_request,
         gen_expected_files=[
             CodeGeneratorResponse.File(

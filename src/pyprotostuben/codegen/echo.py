@@ -4,12 +4,12 @@ from pathlib import Path
 from google.protobuf.compiler.plugin_pb2 import CodeGeneratorRequest, CodeGeneratorResponse
 from google.protobuf.json_format import MessageToJson
 
-from pyprotostuben.codegen.abc import CodeGenerator
+from pyprotostuben.codegen.abc import ProtocPlugin
 from pyprotostuben.logging import LoggerMixin
 from pyprotostuben.protobuf.parser import ParameterParser
 
 
-class RequestEchoCodeGenerator(CodeGenerator, LoggerMixin):
+class RequestEchoProtocPlugin(ProtocPlugin, LoggerMixin):
     def run(self, request: CodeGeneratorRequest) -> CodeGeneratorResponse:
         log = self._log.bind_details(request_file_to_generate=request.file_to_generate)
         log.debug("request received")

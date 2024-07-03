@@ -1,103 +1,127 @@
-import ast
 import typing as t
 from dataclasses import dataclass
+from functools import cache
 
-from google.protobuf.descriptor_pb2 import FieldDescriptorProto
+from google.protobuf.descriptor_pb2 import FieldDescriptorProto, MethodDescriptorProto
 
-from pyprotostuben.python.builder import build_attr, build_generic_ref
-
-
-@dataclass(frozen=True)
-class EnumInfo:
-    ref: t.Sequence[str]
+from pyprotostuben.python.info import ModuleInfo, TypeInfo
 
 
 @dataclass(frozen=True)
-class MessageInfo:
-    ref: t.Sequence[str]
+class ScalarInfo(TypeInfo):
+    pass
+
+
+@dataclass(frozen=True)
+class EnumInfo(TypeInfo):
+    pass
+
+
+@dataclass(frozen=True)
+class MessageInfo(TypeInfo):
+    pass
 
 
 @dataclass(frozen=True)
 class MapEntryInfo:
+    module: ModuleInfo
+    key: t.Union[ScalarInfo, EnumInfo, MessageInfo]
+    value: t.Union[ScalarInfo, EnumInfo, MessageInfo]
+
+
+ProtoInfo = t.Union[ScalarInfo, EnumInfo, MessageInfo, MapEntryInfo]
+
+
+@dataclass(frozen=True)
+class MapEntryPlaceholder:
+    module: ModuleInfo
     key: FieldDescriptorProto
     value: FieldDescriptorProto
 
 
-ProtoInfo = t.Union[EnumInfo, MessageInfo, MapEntryInfo]
-
-
 class TypeRegistry:
-    def __init__(self, infos: t.Mapping[str, ProtoInfo]) -> None:
-        self.__bytes_ast = build_attr("builtins", "bytes")
-        self.__bool_ast = build_attr("builtins", "bool")
-        self.__int_ast = build_attr("builtins", "int")
-        self.__float_ast = build_attr("builtins", "float")
-        self.__str_ast = build_attr("builtins", "str")
-
-        self.__builtin: t.Mapping[FieldDescriptorProto.Type.ValueType, ast.expr] = {
-            FieldDescriptorProto.TYPE_BYTES: self.__bytes_ast,
-            FieldDescriptorProto.TYPE_BOOL: self.__bool_ast,
-            FieldDescriptorProto.TYPE_INT32: self.__int_ast,
-            FieldDescriptorProto.TYPE_INT64: self.__int_ast,
-            FieldDescriptorProto.TYPE_UINT32: self.__int_ast,
-            FieldDescriptorProto.TYPE_UINT64: self.__int_ast,
-            FieldDescriptorProto.TYPE_SINT32: self.__int_ast,
-            FieldDescriptorProto.TYPE_SINT64: self.__int_ast,
-            FieldDescriptorProto.TYPE_FIXED32: self.__int_ast,
-            FieldDescriptorProto.TYPE_FIXED64: self.__int_ast,
-            FieldDescriptorProto.TYPE_SFIXED32: self.__int_ast,
-            FieldDescriptorProto.TYPE_SFIXED64: self.__int_ast,
-            FieldDescriptorProto.TYPE_FLOAT: self.__float_ast,
-            FieldDescriptorProto.TYPE_DOUBLE: self.__float_ast,
-            FieldDescriptorProto.TYPE_STRING: self.__str_ast,
-        }
-
+    def __init__(
+        self,
+        user_types: t.Mapping[str, t.Union[EnumInfo, MessageInfo]],
+        map_entries: t.Mapping[str, MapEntryPlaceholder],
+    ) -> None:
+        self.__scalars: t.Mapping[FieldDescriptorProto.Type.ValueType, ScalarInfo] = self.__build_scalars()
         self.__message_types = {
             FieldDescriptorProto.Type.TYPE_MESSAGE,
             FieldDescriptorProto.Type.TYPE_ENUM,
         }
-        self.__infos = infos
 
-        assert (
-            set(self.__iter_field_type_enum()) - (self.__builtin.keys() | self.__message_types)
-        ) == set(), "not all possible field types are covered"
-        assert self.__builtin.keys() & self.__message_types == set(), "field type should be either builtin or a message"
+        self.__user_types = user_types
+        self.__map_entries = map_entries
 
-    def resolve_field_type(self, proto: FieldDescriptorProto) -> ast.expr:
-        type_ = proto.type
-        is_many = proto.label == FieldDescriptorProto.Label.LABEL_REPEATED
+        assert not (
+            set(self.__iter_field_type_enum()) - (self.__scalars.keys() | self.__message_types)
+        ), "not all possible field types are covered"
+        assert not (self.__scalars.keys() & self.__message_types), "field type should be either scalar or message"
 
-        if type_ in self.__message_types:
-            info = self.__infos[proto.type_name]
+    def resolve_proto_field(self, field: FieldDescriptorProto) -> ProtoInfo:
+        if field.type not in self.__message_types:
+            return self.__scalars[field.type]
 
-            if isinstance(info, (EnumInfo, MessageInfo)):
-                ref = build_attr(*info.ref)
+        if field.type_name in self.__user_types:
+            return self.__user_types[field.type_name]
 
-            elif isinstance(info, MapEntryInfo):
-                is_many = False
-                ref = build_generic_ref(
-                    build_attr("typing", "Mapping"),
-                    self.resolve_field_type(info.key),
-                    self.resolve_field_type(info.value),
-                )
+        return self.resolve_proto_map_entry(field.type_name)
 
-            else:
-                t.assert_never(info)
+    def resolve_proto_method_client_input(self, method: MethodDescriptorProto) -> MessageInfo:
+        return self.resolve_proto_message(method.input_type)
 
-        else:
-            ref = self.__builtin[type_]
+    def resolve_proto_method_server_output(self, method: MethodDescriptorProto) -> MessageInfo:
+        return self.resolve_proto_message(method.output_type)
 
-        if is_many:
-            ref = build_generic_ref(build_attr("typing", "Sequence"), ref)
-
-        return ref
-
-    def resolve_type_ref(self, ref: str) -> ast.expr:
-        info = self.__infos[ref]
+    def resolve_proto_message(self, ref: str) -> MessageInfo:
+        info = self.__user_types[ref]
         if not isinstance(info, MessageInfo):
             raise ValueError("invalid method input type", info, ref)
 
-        return build_attr(*info.ref)
+        return info
+
+    @cache
+    def resolve_proto_map_entry(self, ref: str) -> MapEntryInfo:
+        map_entry = self.__map_entries[ref]
+
+        key = self.resolve_proto_field(map_entry.key)
+        if not isinstance(key, (ScalarInfo, EnumInfo, MessageInfo)):
+            raise ValueError("invalid key info", key)
+
+        value = self.resolve_proto_field(map_entry.value)
+        if not isinstance(value, (ScalarInfo, EnumInfo, MessageInfo)):
+            raise ValueError("invalid value info", value)
+
+        return MapEntryInfo(map_entry.module, key, value)
+
+    @classmethod
+    def __build_scalars(cls) -> t.Mapping[FieldDescriptorProto.Type.ValueType, ScalarInfo]:
+        builtins_module = ModuleInfo(None, "builtins")
+
+        bytes_info = ScalarInfo(builtins_module, ("bytes",))
+        bool_info = ScalarInfo(builtins_module, ("bool",))
+        int_info = ScalarInfo(builtins_module, ("int",))
+        float_info = ScalarInfo(builtins_module, ("float",))
+        str_info = ScalarInfo(builtins_module, ("str",))
+
+        return {
+            FieldDescriptorProto.TYPE_BYTES: bytes_info,
+            FieldDescriptorProto.TYPE_BOOL: bool_info,
+            FieldDescriptorProto.TYPE_INT32: int_info,
+            FieldDescriptorProto.TYPE_INT64: int_info,
+            FieldDescriptorProto.TYPE_UINT32: int_info,
+            FieldDescriptorProto.TYPE_UINT64: int_info,
+            FieldDescriptorProto.TYPE_SINT32: int_info,
+            FieldDescriptorProto.TYPE_SINT64: int_info,
+            FieldDescriptorProto.TYPE_FIXED32: int_info,
+            FieldDescriptorProto.TYPE_FIXED64: int_info,
+            FieldDescriptorProto.TYPE_SFIXED32: int_info,
+            FieldDescriptorProto.TYPE_SFIXED64: int_info,
+            FieldDescriptorProto.TYPE_FLOAT: float_info,
+            FieldDescriptorProto.TYPE_DOUBLE: float_info,
+            FieldDescriptorProto.TYPE_STRING: str_info,
+        }
 
     @classmethod
     def __iter_field_type_enum(cls) -> t.Iterable[FieldDescriptorProto.Type.ValueType]:

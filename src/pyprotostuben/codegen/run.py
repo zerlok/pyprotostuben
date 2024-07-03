@@ -3,12 +3,12 @@ import typing as t
 
 from google.protobuf.compiler.plugin_pb2 import CodeGeneratorRequest, CodeGeneratorResponse
 
-from pyprotostuben.codegen.abc import CodeGenerator
+from pyprotostuben.codegen.abc import ProtocPlugin
 from pyprotostuben.logging import Logger
 
 
 def run_codegen(
-    gen: CodeGenerator,
+    gen: ProtocPlugin,
     input_: t.IO[bytes] = sys.stdin.buffer,
     output: t.IO[bytes] = sys.stdout.buffer,
 ) -> None:

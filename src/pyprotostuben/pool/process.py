@@ -1,6 +1,6 @@
-from multiprocessing.pool import Pool as _PoolImpl
 import typing as t
 from contextlib import contextmanager
+from multiprocessing.pool import Pool as _PoolImpl
 
 from pyprotostuben.logging import LoggerMixin
 from pyprotostuben.pool.abc import Pool
