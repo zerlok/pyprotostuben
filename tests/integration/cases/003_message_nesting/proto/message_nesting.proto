@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package complex;
+
+message Message1 {
+  string f1 = 1;
+  string f2 = 2;
+}
+
+message Message2 {
+  repeated Message1 msg1seq = 1;
+}
+
+message MessageOptional {
+  optional Message2 optmsg = 1;
+}
+
+message NestedRoot {
+  message Nested1 {
+    message Nested2 {
+      Message1 msg = 1;
+    }
+
+    Nested2 inner2 = 1;
+  }
+
+  Nested1 inner1 = 1;
+}
+
+message MessageWithNestedEnum {
+  enum Items {
+    ITEM0 = 0;
+    ITEM1 = 1;
+    ITEM2 = 2;
+  }
+
+  Items item = 1;
+}
+
+message MessageWithMultipleOneOfs {
+  oneof oneof1 {
+    string v1 = 1;
+    string v2 = 2;
+  }
+  oneof oneof2 {
+    string v3 = 3;
+    string v4 = 4;
+  }
+}
+
+message CombinedMessage {
+  repeated Message1 msg1 = 1;
+  optional Message2 msg2 = 2;
+  repeated MessageOptional seq = 3;
+  optional NestedRoot root = 4;
+
+}
+
+service Complex {
+  rpc UnaryUnary(Message1) returns (CombinedMessage) {}
+  rpc StreamStream(stream Message2) returns (stream CombinedMessage) {}
+}

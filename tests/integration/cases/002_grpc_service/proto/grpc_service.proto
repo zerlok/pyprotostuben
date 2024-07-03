@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package grpc_service;
+
+message Request {
+  string eggs = 1;
+}
+
+message Response {
+  string banana = 1;
+}
+
+service Service {
+  rpc DoUnaryUnary(Request) returns (Response) {}
+  rpc DoUnaryStream(Request) returns (stream Response) {}
+  rpc DoStreamUnary(stream Request) returns (Response) {}
+  rpc DoStreamStream(stream Request) returns (stream Response) {}
+}

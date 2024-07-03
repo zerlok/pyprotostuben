@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package types;
+
+message STD {
+  bool b1 = 1;
+  int32 i32 = 2;
+  float f = 3;
+  string str = 4;
+  repeated int32 int_seq = 5;
+  repeated string str_seq = 6;
+  optional string opt_str = 7;
+  map<int64, float> i64_to_float = 8;
+  map<string, bool> str_to_bool = 9;
+}
