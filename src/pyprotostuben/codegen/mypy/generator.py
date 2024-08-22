@@ -17,9 +17,7 @@ from pyprotostuben.codegen.module_ast import ModuleASTProtoVisitorDecoratorFacto
 from pyprotostuben.codegen.mypy.context import MessageContext, GRPCContext
 from pyprotostuben.logging import LoggerMixin
 from pyprotostuben.protobuf.builder.grpc import GRPCASTBuilder, MethodInfo
-from pyprotostuben.protobuf.builder.grpc_aio import GRPCAioASTBuilder
 from pyprotostuben.protobuf.builder.message import MessageASTBuilder, FieldInfo
-from pyprotostuben.protobuf.builder.message_immutable import ImmutableMessageASTBuilder
 from pyprotostuben.protobuf.builder.resolver import ProtoDependencyResolver
 from pyprotostuben.protobuf.context import CodeGeneratorContext
 from pyprotostuben.protobuf.file import ProtoFile
@@ -69,28 +67,21 @@ class MypyStubASTGeneratorFactory(ModuleASTProtoVisitorDecoratorFactory):
     def __create_message_ast_builder(self, module: ModuleInfo, deps: t.Set[ModuleInfo]) -> MessageASTBuilder:
         inner = ASTBuilder(ProtoDependencyResolver(module, deps))
 
-        mode = self.__context.params.get_raw_by_name("messages", "immutable")
-        if mode == "mutable":
-            return MessageASTBuilder(inner)
-
-        elif mode == "immutable":
-            return ImmutableMessageASTBuilder(inner)
-
-        else:
-            raise ValueError("unsupported message mode", mode)
+        return MessageASTBuilder(
+            inner,
+            mutable=self.__context.params.has_flag("message-mutable"),
+            all_init_args_optional=self.__context.params.has_flag("message-all-init-args-optional"),
+        )
 
     def __create_grpc_ast_builder(self, module: ModuleInfo, deps: t.Set[ModuleInfo]) -> GRPCASTBuilder:
         inner = ASTBuilder(ProtoDependencyResolver(module, deps))
 
-        mode = self.__context.params.get_raw_by_name("grpc", "aio")
-        if mode == "aio":
-            return GRPCAioASTBuilder(inner)
-
-        elif mode == "default":
-            return GRPCASTBuilder(inner)
-
-        else:
-            raise ValueError("unsupported grpc mode", mode)
+        return GRPCASTBuilder(
+            inner,
+            is_sync=self.__context.params.has_flag("grpc-sync"),
+            skip_servicer=self.__context.params.has_flag("grpc-skip-servicer"),
+            skip_stub=self.__context.params.has_flag("grpc-skip-stub"),
+        )
 
 
 class MypyStubASTGenerator(ProtoVisitorDecorator, LoggerMixin):
@@ -187,7 +178,7 @@ class MypyStubASTGenerator(ProtoVisitorDecorator, LoggerMixin):
 
         annotation = builder.build_protobuf_type_ref(info)
         if not isinstance(info, MapEntryInfo) and proto.label == FieldDescriptorProto.Label.LABEL_REPEATED:
-            annotation = builder.build_protobuf_repeated_ref(info, annotation)
+            annotation = builder.build_protobuf_repeated_ref(annotation)
 
         message.fields.append(
             FieldInfo(

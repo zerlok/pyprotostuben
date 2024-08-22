@@ -113,8 +113,18 @@ class ASTBuilder(metaclass=abc.ABCMeta):
                 ],
             ),
             returns=self.build_ref(returns),
-            body=[ast.Ellipsis()],
-            lineno=None,
+            body=[
+                # Ellipsis is ok for function body, but ast typing says it isnt't
+                t.cast(
+                    ast.stmt,
+                    ast.Ellipsis(
+                        # ast typing says that `value` is required position arg, but no
+                        # type: ignore[call-arg]
+                    ),
+                )
+            ],
+            # Seems like it is allowed to pass `None`, but ast typing says it isn't
+            lineno=t.cast(int, None),
         )
 
     def build_class_def(
@@ -131,7 +141,7 @@ class ASTBuilder(metaclass=abc.ABCMeta):
             decorator_list=[self.build_ref(dec) for dec in (decorators or ())],
             bases=[self.build_ref(base) for base in (bases or ())],
             keywords=[ast.keyword(arg=key, value=self.build_ref(value)) for key, value in (keywords or {}).items()],
-            body=body or [],
+            body=list(body or []),
         )
 
     def build_abstract_class_def(
@@ -185,16 +195,30 @@ class ASTBuilder(metaclass=abc.ABCMeta):
             is_async=is_async,
         )
 
-    def build_property_stub(
+    def build_property_getter_stub(
         self,
         *,
         name: str,
-        returns: TypeRef,
+        annotation: TypeRef,
     ) -> ast.stmt:
         return self.build_method_stub(
             name=name,
             decorators=[TypeInfo.build(self.builtins_module, "property")],
-            returns=returns,
+            returns=annotation,
+            is_async=False,
+        )
+
+    def build_property_setter_stub(
+        self,
+        *,
+        name: str,
+        annotation: TypeRef,
+    ) -> ast.stmt:
+        return self.build_method_stub(
+            name=name,
+            decorators=[TypeInfo.build(None, name, "setter")],
+            args=[self.build_pos_arg(name="value", annotation=annotation)],
+            returns=self.build_none_ref(),
             is_async=False,
         )
 
@@ -215,8 +239,9 @@ class ASTBuilder(metaclass=abc.ABCMeta):
     ) -> ast.stmt:
         return ast.AnnAssign(
             target=ast.Name(id=name),
-            annotation=annotation,
+            annotation=self.build_ref(annotation),
             value=default,
+            simple=1,
         )
 
     def build_generic_ref(self, generic: TypeRef, *args: TypeRef) -> ast.expr:
