@@ -8,6 +8,8 @@ from logging import Formatter, LoggerAdapter, LogRecord, getLogger
 from logging.config import dictConfig
 from pathlib import Path
 
+from typing_extensions import Self
+
 
 class Logger(
     LoggerAdapter,  # type: ignore[type-arg]
@@ -67,18 +69,21 @@ class Logger(
         exc_info = kwargs.pop("exc_info", None)
         return msg, {
             "exc_info": exc_info,
-            "extra": {**self.extra, "details": {**self.details, **kwargs}},
+            "extra": _merge_mappings(self.extra, {"details": _merge_mappings(self.details, kwargs)}),
         }
 
     @ft.cached_property
     def details(self) -> t.Mapping[str, object]:
+        if self.extra is None:
+            return {}
+
         value = self.extra.get("details")
         return value if isinstance(value, dict) else {}
 
-    def bind(self, **kwargs: object) -> "Logger":
-        return self.__class__(self.logger, {**self.extra, **kwargs}) if kwargs else self
+    def bind(self, **kwargs: object) -> Self:
+        return self.__class__(self.logger, _merge_mappings(self.extra, kwargs)) if kwargs else self
 
-    def bind_details(self, **kwargs: object) -> "Logger":
+    def bind_details(self, **kwargs: object) -> Self:
         return self.bind(details=kwargs) if kwargs else self
 
 
@@ -102,3 +107,16 @@ class SoftFormatter(Formatter):
     def formatMessage(self, record: LogRecord) -> str:  # noqa: N802
         assert self._fmt is not None
         return self._fmt % {field: getattr(record, field, self.__defaults.get(field, "")) for field in self.__fields}
+
+
+def _merge_mappings(
+    left: t.Optional[t.Mapping[str, object]],
+    right: t.Optional[t.Mapping[str, object]],
+) -> t.Mapping[str, object]:
+    if not right:
+        return left or {}
+
+    if not left:
+        return right or {}
+
+    return {**left, **right}

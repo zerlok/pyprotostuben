@@ -83,49 +83,27 @@ class ASTBuilder:
         returns: TypeRef,
         is_async: bool = False,
     ) -> ast.stmt:
-        return (ast.AsyncFunctionDef if is_async else ast.FunctionDef)(
+        if is_async:
+            return ast.AsyncFunctionDef(
+                type_comment=None,
+                type_params=[],
+                name=name,
+                args=self._build_func_args(args),
+                body=self._build_stub_body(),
+                decorator_list=self._build_decorators(decorators),
+                returns=self.build_ref(returns),
+                # Seems like it is allowed to pass `None`, but ast typing says it isn't
+                lineno=t.cast(int, None),
+            )
+
+        return ast.FunctionDef(
+            type_comment=None,
+            type_params=[],
             name=name,
-            decorator_list=[self.build_ref(dec) for dec in (decorators or ())],
-            args=ast.arguments(
-                posonlyargs=[],
-                args=[
-                    ast.arg(
-                        arg=arg.name,
-                        annotation=self.build_ref(arg.annotation) if arg.annotation is not None else None,
-                    )
-                    for arg in (args or [])
-                    if arg.kind is FuncArgInfo.Kind.POS
-                ],
-                defaults=[
-                    self.build_ref(arg.default)
-                    for arg in (args or [])
-                    if arg.kind is FuncArgInfo.Kind.POS and arg.default is not None
-                ],
-                kwonlyargs=[
-                    ast.arg(
-                        arg=arg.name,
-                        annotation=self.build_ref(arg.annotation) if arg.annotation is not None else None,
-                    )
-                    for arg in (args or [])
-                    if arg.kind is FuncArgInfo.Kind.KW_ONLY
-                ],
-                kw_defaults=[
-                    self.build_ref(arg.default) if arg.default is not None else None
-                    for arg in (args or [])
-                    if arg.kind is FuncArgInfo.Kind.KW_ONLY
-                ],
-            ),
+            decorator_list=self._build_decorators(decorators),
+            args=self._build_func_args(args),
             returns=self.build_ref(returns),
-            body=[
-                # Ellipsis is ok for function body, but ast typing says it isnt't
-                t.cast(
-                    ast.stmt,
-                    ast.Ellipsis(
-                        # ast typing says that `value` is required position arg, but no
-                        # type: ignore[call-arg]
-                    ),
-                ),
-            ],
+            body=self._build_stub_body(),
             # Seems like it is allowed to pass `None`, but ast typing says it isn't
             lineno=t.cast(int, None),
         )
@@ -140,8 +118,9 @@ class ASTBuilder:
         body: t.Optional[t.Sequence[ast.stmt]] = None,
     ) -> ast.ClassDef:
         return ast.ClassDef(
+            type_params=[],
             name=name,
-            decorator_list=[self.build_ref(dec) for dec in (decorators or ())],
+            decorator_list=self._build_decorators(decorators),
             bases=[self.build_ref(base) for base in (bases or ())],
             keywords=[ast.keyword(arg=key, value=self.build_ref(value)) for key, value in (keywords or {}).items()],
             body=list(body or []),
@@ -313,3 +292,49 @@ class ASTBuilder:
             ],
             type_ignores=[],
         )
+
+    def _build_decorators(self, decorators: t.Optional[t.Sequence[t.Union[ast.expr, TypeInfo]]]) -> t.List[ast.expr]:
+        return [self.build_ref(dec) for dec in (decorators or ())]
+
+    def _build_func_args(self, args: t.Optional[t.Sequence[FuncArgInfo]]) -> ast.arguments:
+        return ast.arguments(
+            posonlyargs=[],
+            args=[
+                ast.arg(
+                    arg=arg.name,
+                    annotation=self.build_ref(arg.annotation) if arg.annotation is not None else None,
+                )
+                for arg in (args or [])
+                if arg.kind is FuncArgInfo.Kind.POS
+            ],
+            defaults=[
+                self.build_ref(arg.default)
+                for arg in (args or [])
+                if arg.kind is FuncArgInfo.Kind.POS and arg.default is not None
+            ],
+            kwonlyargs=[
+                ast.arg(
+                    arg=arg.name,
+                    annotation=self.build_ref(arg.annotation) if arg.annotation is not None else None,
+                )
+                for arg in (args or [])
+                if arg.kind is FuncArgInfo.Kind.KW_ONLY
+            ],
+            kw_defaults=[
+                self.build_ref(arg.default) if arg.default is not None else None
+                for arg in (args or [])
+                if arg.kind is FuncArgInfo.Kind.KW_ONLY
+            ],
+        )
+
+    def _build_stub_body(self) -> t.List[ast.stmt]:
+        return [
+            # Ellipsis is ok for function body, but ast typing says it isnt't
+            t.cast(
+                ast.stmt,
+                ast.Ellipsis(
+                    # ast typing says that `value` is required position arg, but no
+                    # type: ignore[call-arg]
+                ),
+            ),
+        ]
