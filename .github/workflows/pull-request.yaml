@@ -12,6 +12,8 @@ jobs:
       fail-fast: false
       matrix:
         python-version: [ "3.9", "3.10", "3.11", "3.12" ]
+        protoc-version: [ "26.1" ]
+        buf-version: [ "1.31.0" ]
     steps:
       - uses: actions/checkout@v4
       - name: Install Python
@@ -33,6 +35,14 @@ jobs:
           key: venv-${{ hashFiles('poetry.lock') }}
       - name: Install the project dependencies
         run: poetry install --all-extras
+      - name: Install protoc
+        run: |-
+          wget -qO protoc.zip "https://github.com/protocolbuffers/protobuf/releases/download/v${{ matric.protoc-version }}/protoc-${{ matric.protoc-version }}-linux-x86_64.zip"
+          && unzip -q protoc.zip 'bin/*' 'include/google/protobuf/*' -d .venv
+      - name: Install buf
+        run: |-
+          wget -qO .venv/bin/buf "https://github.com/bufbuild/buf/releases/download/v${{ matrix.buf-version }}/buf-Linux-x86_64"
+          && chmod +x .venv/bin/buf
       - name: Run mypy
         run: poetry run mypy
       - name: Run pytest
