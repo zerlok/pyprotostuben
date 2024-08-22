@@ -37,7 +37,7 @@ jobs:
         run: poetry install --all-extras
       - name: Install protoc
         run: |-
-          wget -qO protoc.zip "https://github.com/protocolbuffers/protobuf/releases/download/v${{ matric.protoc-version }}/protoc-${{ matric.protoc-version }}-linux-x86_64.zip"
+          wget -qO protoc.zip "https://github.com/protocolbuffers/protobuf/releases/download/v${{ matrix.protoc-version }}/protoc-${{ matrix.protoc-version }}-linux-x86_64.zip"
           && unzip -q protoc.zip 'bin/*' 'include/google/protobuf/*' -d .venv
       - name: Install buf
         run: |-
