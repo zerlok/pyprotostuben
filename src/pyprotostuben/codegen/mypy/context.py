@@ -3,7 +3,7 @@ import typing as t
 from dataclasses import dataclass, field
 
 from pyprotostuben.protobuf.builder.grpc import GRPCASTBuilder, MethodInfo
-from pyprotostuben.protobuf.builder.message import MessageASTBuilder, FieldInfo
+from pyprotostuben.protobuf.builder.message import FieldInfo, MessageASTBuilder
 from pyprotostuben.protobuf.file import ProtoFile
 from pyprotostuben.python.info import ModuleInfo
 

@@ -28,7 +28,8 @@ class RequestEchoProtocPlugin(ProtocPlugin, LoggerMixin):
             content = MessageToJson(request, preserving_proto_field_name=True, sort_keys=True)
 
         else:
-            raise ValueError("unsupported format", format_)
+            msg = "unsupported format"
+            raise ValueError(msg, format_)
 
         log.info("request handled", dest=dest)
 

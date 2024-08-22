@@ -1,12 +1,12 @@
 from google.protobuf.descriptor_pb2 import (
-    FileDescriptorProto,
+    DescriptorProto,
     EnumDescriptorProto,
     EnumValueDescriptorProto,
-    DescriptorProto,
-    OneofDescriptorProto,
     FieldDescriptorProto,
-    ServiceDescriptorProto,
+    FileDescriptorProto,
     MethodDescriptorProto,
+    OneofDescriptorProto,
+    ServiceDescriptorProto,
 )
 
 from pyprotostuben.logging import LoggerMixin

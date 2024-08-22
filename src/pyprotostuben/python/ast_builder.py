@@ -1,3 +1,6 @@
+# Skip `too many arguments rule`, because it is a builder. Methods are invoked with key only args.
+# ruff: noqa: PLR0913
+
 import abc
 import ast
 import enum
@@ -25,10 +28,10 @@ class FuncArgInfo:
 class DependencyResolver(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def resolve(self, info: TypeInfo) -> TypeInfo:
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
-class ASTBuilder(metaclass=abc.ABCMeta):
+class ASTBuilder:
     def __init__(self, resolver: DependencyResolver) -> None:
         self.__resolver = resolver
 
@@ -80,41 +83,27 @@ class ASTBuilder(metaclass=abc.ABCMeta):
         returns: TypeRef,
         is_async: bool = False,
     ) -> ast.stmt:
-        return (ast.AsyncFunctionDef if is_async else ast.FunctionDef)(
+        if is_async:
+            return ast.AsyncFunctionDef(  # type: ignore[call-overload,no-any-return,unused-ignore]
+                # type_comment and type_params has default value each in 3.12 and not available in 3.9
+                name=name,
+                args=self._build_func_args(args),
+                body=self._build_stub_body(),
+                decorator_list=self._build_decorators(decorators),
+                returns=self.build_ref(returns),
+                # Seems like it is allowed to pass `None`, but ast typing says it isn't
+                lineno=t.cast(int, None),
+            )
+
+        return ast.FunctionDef(  # type: ignore[call-overload,no-any-return,unused-ignore]
+            # type_comment and type_params has default value each in 3.12 and not available in 3.9
             name=name,
-            decorator_list=[self.build_ref(dec) for dec in (decorators or ())],
-            args=ast.arguments(
-                posonlyargs=[],
-                args=[
-                    ast.arg(
-                        arg=arg.name,
-                        annotation=self.build_ref(arg.annotation) if arg.annotation is not None else None,
-                    )
-                    for arg in (args or [])
-                    if arg.kind is FuncArgInfo.Kind.POS
-                ],
-                defaults=[
-                    self.build_ref(arg.default)
-                    for arg in (args or [])
-                    if arg.kind is FuncArgInfo.Kind.POS and arg.default is not None
-                ],
-                kwonlyargs=[
-                    ast.arg(
-                        arg=arg.name,
-                        annotation=self.build_ref(arg.annotation) if arg.annotation is not None else None,
-                    )
-                    for arg in (args or [])
-                    if arg.kind is FuncArgInfo.Kind.KW_ONLY
-                ],
-                kw_defaults=[
-                    self.build_ref(arg.default) if arg.default is not None else None
-                    for arg in (args or [])
-                    if arg.kind is FuncArgInfo.Kind.KW_ONLY
-                ],
-            ),
+            decorator_list=self._build_decorators(decorators),
+            args=self._build_func_args(args),
             returns=self.build_ref(returns),
-            body=[ast.Ellipsis()],
-            lineno=None,
+            body=self._build_stub_body(),
+            # Seems like it is allowed to pass `None`, but ast typing says it isn't
+            lineno=t.cast(int, None),
         )
 
     def build_class_def(
@@ -126,12 +115,13 @@ class ASTBuilder(metaclass=abc.ABCMeta):
         keywords: t.Optional[t.Mapping[str, TypeRef]] = None,
         body: t.Optional[t.Sequence[ast.stmt]] = None,
     ) -> ast.ClassDef:
-        return ast.ClassDef(
+        # type_params has default value in 3.12 and not available in 3.9
+        return ast.ClassDef(  # type: ignore[call-arg,unused-ignore]
             name=name,
-            decorator_list=[self.build_ref(dec) for dec in (decorators or ())],
+            decorator_list=self._build_decorators(decorators),
             bases=[self.build_ref(base) for base in (bases or ())],
             keywords=[ast.keyword(arg=key, value=self.build_ref(value)) for key, value in (keywords or {}).items()],
-            body=body or [],
+            body=list(body or []),
         )
 
     def build_abstract_class_def(
@@ -185,16 +175,30 @@ class ASTBuilder(metaclass=abc.ABCMeta):
             is_async=is_async,
         )
 
-    def build_property_stub(
+    def build_property_getter_stub(
         self,
         *,
         name: str,
-        returns: TypeRef,
+        annotation: TypeRef,
     ) -> ast.stmt:
         return self.build_method_stub(
             name=name,
             decorators=[TypeInfo.build(self.builtins_module, "property")],
-            returns=returns,
+            returns=annotation,
+            is_async=False,
+        )
+
+    def build_property_setter_stub(
+        self,
+        *,
+        name: str,
+        annotation: TypeRef,
+    ) -> ast.stmt:
+        return self.build_method_stub(
+            name=name,
+            decorators=[TypeInfo.build(None, name, "setter")],
+            args=[self.build_pos_arg(name="value", annotation=annotation)],
+            returns=self.build_none_ref(),
             is_async=False,
         )
 
@@ -215,8 +219,9 @@ class ASTBuilder(metaclass=abc.ABCMeta):
     ) -> ast.stmt:
         return ast.AnnAssign(
             target=ast.Name(id=name),
-            annotation=annotation,
+            annotation=self.build_ref(annotation),
             value=default,
+            simple=1,
         )
 
     def build_generic_ref(self, generic: TypeRef, *args: TypeRef) -> ast.expr:
@@ -228,14 +233,14 @@ class ASTBuilder(metaclass=abc.ABCMeta):
 
         return ast.Subscript(value=self.build_ref(generic), slice=ast.Tuple(elts=[self.build_ref(arg) for arg in args]))
 
-    def build_mapping_ref(self, key: TypeRef, value: TypeRef, mutable: bool = False) -> ast.expr:
+    def build_mapping_ref(self, key: TypeRef, value: TypeRef, *, mutable: bool = False) -> ast.expr:
         return self.build_generic_ref(
             TypeInfo.build(self.typing_module, "MutableMapping" if mutable else "Mapping"),
             key,
             value,
         )
 
-    def build_sequence_ref(self, inner: TypeRef, mutable: bool = False) -> ast.expr:
+    def build_sequence_ref(self, inner: TypeRef, *, mutable: bool = False) -> ast.expr:
         return self.build_generic_ref(
             TypeInfo.build(self.typing_module, "MutableSequence" if mutable else "Sequence"),
             inner,
@@ -285,3 +290,49 @@ class ASTBuilder(metaclass=abc.ABCMeta):
             ],
             type_ignores=[],
         )
+
+    def _build_decorators(self, decorators: t.Optional[t.Sequence[t.Union[ast.expr, TypeInfo]]]) -> t.List[ast.expr]:
+        return [self.build_ref(dec) for dec in (decorators or ())]
+
+    def _build_func_args(self, args: t.Optional[t.Sequence[FuncArgInfo]]) -> ast.arguments:
+        return ast.arguments(
+            posonlyargs=[],
+            args=[
+                ast.arg(
+                    arg=arg.name,
+                    annotation=self.build_ref(arg.annotation) if arg.annotation is not None else None,
+                )
+                for arg in (args or [])
+                if arg.kind is FuncArgInfo.Kind.POS
+            ],
+            defaults=[
+                self.build_ref(arg.default)
+                for arg in (args or [])
+                if arg.kind is FuncArgInfo.Kind.POS and arg.default is not None
+            ],
+            kwonlyargs=[
+                ast.arg(
+                    arg=arg.name,
+                    annotation=self.build_ref(arg.annotation) if arg.annotation is not None else None,
+                )
+                for arg in (args or [])
+                if arg.kind is FuncArgInfo.Kind.KW_ONLY
+            ],
+            kw_defaults=[
+                self.build_ref(arg.default) if arg.default is not None else None
+                for arg in (args or [])
+                if arg.kind is FuncArgInfo.Kind.KW_ONLY
+            ],
+        )
+
+    def _build_stub_body(self) -> t.List[ast.stmt]:
+        return [
+            # Ellipsis is ok for function body, but ast typing says it isnt't
+            t.cast(
+                ast.stmt,
+                ast.Ellipsis(
+                    # ast typing says that `value` is required position arg, but no
+                    # type: ignore[call-arg]
+                ),
+            ),
+        ]

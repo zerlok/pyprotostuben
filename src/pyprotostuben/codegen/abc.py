@@ -16,4 +16,4 @@ class ProtocPlugin(metaclass=abc.ABCMeta):
 class ProtoFileGenerator(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def run(self, file: ProtoFile) -> t.Iterable[t.Tuple[ProtoFile, Path, str]]:
-        raise NotImplementedError()
+        raise NotImplementedError

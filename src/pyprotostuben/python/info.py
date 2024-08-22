@@ -57,7 +57,7 @@ class ModuleInfo(NamespaceInfo):
     @ft.cached_property
     def file(self) -> Path:
         return ((self.package.directory / self.name) if self.package is not None else Path(self.name)).with_suffix(
-            ".py"
+            ".py",
         )
 
     @ft.cached_property

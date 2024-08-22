@@ -3,27 +3,25 @@ import typing as t
 from pathlib import Path
 
 from google.protobuf.descriptor_pb2 import (
-    FileDescriptorProto,
+    DescriptorProto,
     EnumDescriptorProto,
     EnumValueDescriptorProto,
-    DescriptorProto,
-    OneofDescriptorProto,
     FieldDescriptorProto,
-    ServiceDescriptorProto,
+    FileDescriptorProto,
     MethodDescriptorProto,
+    OneofDescriptorProto,
+    ServiceDescriptorProto,
 )
 
 from pyprotostuben.codegen.module_ast import ModuleASTProtoVisitorDecoratorFactory
-from pyprotostuben.codegen.mypy.context import MessageContext, GRPCContext
+from pyprotostuben.codegen.mypy.context import GRPCContext, MessageContext
 from pyprotostuben.logging import LoggerMixin
 from pyprotostuben.protobuf.builder.grpc import GRPCASTBuilder, MethodInfo
-from pyprotostuben.protobuf.builder.grpc_aio import GRPCAioASTBuilder
-from pyprotostuben.protobuf.builder.message import MessageASTBuilder, FieldInfo
-from pyprotostuben.protobuf.builder.message_immutable import ImmutableMessageASTBuilder
+from pyprotostuben.protobuf.builder.message import FieldInfo, MessageASTBuilder
 from pyprotostuben.protobuf.builder.resolver import ProtoDependencyResolver
 from pyprotostuben.protobuf.context import CodeGeneratorContext
 from pyprotostuben.protobuf.file import ProtoFile
-from pyprotostuben.protobuf.registry import TypeRegistry, MapEntryInfo
+from pyprotostuben.protobuf.registry import MapEntryInfo, TypeRegistry
 from pyprotostuben.protobuf.visitor.decorator import ProtoVisitorDecorator
 from pyprotostuben.python.ast_builder import ASTBuilder
 from pyprotostuben.python.info import ModuleInfo
@@ -69,28 +67,21 @@ class MypyStubASTGeneratorFactory(ModuleASTProtoVisitorDecoratorFactory):
     def __create_message_ast_builder(self, module: ModuleInfo, deps: t.Set[ModuleInfo]) -> MessageASTBuilder:
         inner = ASTBuilder(ProtoDependencyResolver(module, deps))
 
-        mode = self.__context.params.get_raw_by_name("messages", "immutable")
-        if mode == "mutable":
-            return MessageASTBuilder(inner)
-
-        elif mode == "immutable":
-            return ImmutableMessageASTBuilder(inner)
-
-        else:
-            raise ValueError("unsupported message mode", mode)
+        return MessageASTBuilder(
+            inner,
+            mutable=self.__context.params.has_flag("message-mutable"),
+            all_init_args_optional=self.__context.params.has_flag("message-all-init-args-optional"),
+        )
 
     def __create_grpc_ast_builder(self, module: ModuleInfo, deps: t.Set[ModuleInfo]) -> GRPCASTBuilder:
         inner = ASTBuilder(ProtoDependencyResolver(module, deps))
 
-        mode = self.__context.params.get_raw_by_name("grpc", "aio")
-        if mode == "aio":
-            return GRPCAioASTBuilder(inner)
-
-        elif mode == "default":
-            return GRPCASTBuilder(inner)
-
-        else:
-            raise ValueError("unsupported grpc mode", mode)
+        return GRPCASTBuilder(
+            inner,
+            is_sync=self.__context.params.has_flag("grpc-sync"),
+            skip_servicer=self.__context.params.has_flag("grpc-skip-servicer"),
+            skip_stub=self.__context.params.has_flag("grpc-skip-stub"),
+        )
 
 
 class MypyStubASTGenerator(ProtoVisitorDecorator, LoggerMixin):
@@ -112,7 +103,7 @@ class MypyStubASTGenerator(ProtoVisitorDecorator, LoggerMixin):
         self.__messages.put(self.__factory.create_file_message_context(file))
         self.__grpcs.put(self.__factory.create_file_grpc_context(file))
 
-    def leave_file_descriptor_proto(self, proto: FileDescriptorProto) -> None:
+    def leave_file_descriptor_proto(self, _: FileDescriptorProto) -> None:
         message = self.__messages.pop()
         grpc = self.__grpcs.pop()
 
@@ -125,7 +116,7 @@ class MypyStubASTGenerator(ProtoVisitorDecorator, LoggerMixin):
             grpc.nested,
         )
 
-    def enter_enum_descriptor_proto(self, proto: EnumDescriptorProto) -> None:
+    def enter_enum_descriptor_proto(self, _: EnumDescriptorProto) -> None:
         parent = self.__messages.get_last()
 
         self.__messages.put(parent.sub())
@@ -146,7 +137,7 @@ class MypyStubASTGenerator(ProtoVisitorDecorator, LoggerMixin):
 
         parent.nested.append(builder.build_protobuf_enum_value_def(proto.name, proto.number))
 
-    def enter_descriptor_proto(self, proto: DescriptorProto) -> None:
+    def enter_descriptor_proto(self, _: DescriptorProto) -> None:
         parent = self.__messages.get_last()
 
         self.__messages.put(parent.sub())
@@ -165,7 +156,7 @@ class MypyStubASTGenerator(ProtoVisitorDecorator, LoggerMixin):
                 name=proto.name,
                 fields=message.fields,
                 nested=message.nested,
-            )
+            ),
         )
 
     def enter_oneof_descriptor_proto(self, proto: OneofDescriptorProto) -> None:
@@ -187,7 +178,7 @@ class MypyStubASTGenerator(ProtoVisitorDecorator, LoggerMixin):
 
         annotation = builder.build_protobuf_type_ref(info)
         if not isinstance(info, MapEntryInfo) and proto.label == FieldDescriptorProto.Label.LABEL_REPEATED:
-            annotation = builder.build_protobuf_repeated_ref(info, annotation)
+            annotation = builder.build_protobuf_repeated_ref(annotation)
 
         message.fields.append(
             FieldInfo(
@@ -195,15 +186,14 @@ class MypyStubASTGenerator(ProtoVisitorDecorator, LoggerMixin):
                 annotation=annotation,
                 optional=is_optional,
                 default=None,
-                # TODO: support default value.
-                # default=proto.default_value,
+                # TODO: support proto.default_value
                 oneof_group=message.oneof_groups[proto.oneof_index]
                 if not is_optional and proto.HasField("oneof_index")
                 else None,
-            )
+            ),
         )
 
-    def enter_service_descriptor_proto(self, proto: ServiceDescriptorProto) -> None:
+    def enter_service_descriptor_proto(self, _: ServiceDescriptorProto) -> None:
         parent = self.__grpcs.get_last()
 
         self.__grpcs.put(parent.sub())
@@ -230,5 +220,5 @@ class MypyStubASTGenerator(ProtoVisitorDecorator, LoggerMixin):
                 client_streaming=proto.client_streaming,
                 server_output=builder.build_grpc_message_ref(self.__registry.resolve_proto_method_server_output(proto)),
                 server_streaming=proto.server_streaming,
-            )
+            ),
         )

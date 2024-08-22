@@ -29,6 +29,20 @@ build-backend = "poetry.core.masonry.api"
 include = ["src/**/*.py", "tests/**/*.py"]
 line-length = 120
 
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "ANN", # because we use mypy
+    "D", # TODO: add docstrings to public code
+    "FA", # TODO: consider should we use __annotations__
+    "TD", # no task tracking
+    "FIX", # TODO: consider enable it against new code on pull requests
+    "COM812", # because ruff format suggests to skip it
+    "ISC001", # because ruff format suggests to skip it
+    "RET505", # clashes with mypy exhaustiveness check
+    "S101", # allow asserts for tests checks and mypy help
+]
+
 [tool.mypy]
 files = ["src", "tests"]
 strict = true

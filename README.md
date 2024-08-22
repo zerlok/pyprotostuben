@@ -10,9 +10,24 @@ install
 poetry add pyprotostuben
 ```
 
-available executables:
+### protoc-gen-pyprotostuben
 
-* `protoc-gen-pyprotostuben` -- a protoc plugin that generates MyPy stubs
+a protoc plugin that generates MyPy stubs
+
+#### features
+
+* choose message structure immutability / mutability
+* choose async / sync grpc module stubs
+* grpc servicer abstract methods have full signature (with appropriate type args in generics), thus it is easier to
+  implement methods in IDE
+
+#### flags
+
+* `message-mutable` -- add setters for fields, use mutable containers
+* `message-all-init-args-optional` -- each field is optional in message constructor (event if required)
+* `grpc-sync` -- use sync grpc stubs instead of grpc.aio module and async defs
+* `grpc-skip-servicer` -- don't generate code for servicers
+* `grpc-skip-stub` -- don't generate code for stubs
 
 ## examples
 
@@ -25,16 +40,22 @@ available executables:
 
 * /
     * src/
-        * foo.proto
+        * greeting.proto
             ```protobuf
             syntax = "proto3";
-              
-            package bar;
-              
-            message Spam {
-                string eggs = 1;
-                repeated int64 pizza = 2;
-                optional string apple = 3;
+            
+            package greeting;
+            
+            message GreetRequest {
+              string name = 1;
+            }
+            
+            message GreetResponse {
+              string text = 1;
+            }
+            
+            service Greeter {
+              rpc Greet(GreetRequest) returns (GreetResponse) {}
             }
             ```
     * buf.yaml
@@ -63,30 +84,56 @@ buf generate
 
 #### output
 
-##### src/foo_pb2.pyi
+##### src/greeting_pb2.pyi
 
 ```python
 import builtins
+import google.protobuf.message
 import typing
 
-import google.protobuf.message
+class GreetRequest(google.protobuf.message.Message):
 
-
-class Spam(google.protobuf.message.Message):
-
-    def __init__(self, *, eggs: builtins.str, pizza: typing.Sequence[builtins.int],
-                 apple: typing.Optional[builtins.str] = None) -> None: ...
+    def __init__(self, *, name: builtins.str) -> None:...
 
     @builtins.property
-    def eggs(self) -> builtins.str: ...
+    def name(self) -> builtins.str:...
+
+    def HasField(self, field_name: typing.NoReturn) -> typing.NoReturn:...
+
+    def WhichOneof(self, oneof_group: typing.NoReturn) -> typing.NoReturn:...
+
+class GreetResponse(google.protobuf.message.Message):
+
+    def __init__(self, *, text: builtins.str) -> None:...
 
     @builtins.property
-    def pizza(self) -> typing.Sequence[builtins.int]: ...
+    def text(self) -> builtins.str:...
 
-    @builtins.property
-    def apple(self) -> builtins.str: ...
+    def HasField(self, field_name: typing.NoReturn) -> typing.NoReturn:...
 
-    def HasField(self, field_name: typing.Literal['apple']) -> bool: ...
+    def WhichOneof(self, oneof_group: typing.NoReturn) -> typing.NoReturn:...
+```
 
-    def WhichOneof(self, oneof_group: typing.NoReturn) -> typing.NoReturn: ...
+##### src/greeting_pb2_grpc.pyi
+
+```python
+import abc
+import builtins
+import greeting_pb2
+import grpc
+import grpc.aio
+import typing
+
+class GreeterServicer(metaclass=abc.ABCMeta):
+
+    @abc.abstractmethod
+    async def Greet(self, request: greeting_pb2.GreetRequest, context: grpc.aio.ServicerContext[greeting_pb2.GreetRequest, greeting_pb2.GreetResponse]) -> greeting_pb2.GreetResponse:...
+
+def add_GreeterServicer_to_server(servicer: GreeterServicer, server: grpc.aio.Server) -> None:...
+
+class GreeterStub:
+
+    def __init__(self, channel: grpc.aio.Channel) -> None:...
+
+    async def Greet(self, request: greeting_pb2.GreetRequest, *, timeout: typing.Optional[builtins.float]=None, metadata: typing.Optional[grpc.aio.MetadataType]=None, credentials: typing.Optional[grpc.CallCredentials]=None, wait_for_ready: typing.Optional[builtins.bool]=None, compression: typing.Optional[grpc.Compression]=None) -> grpc.aio.UnaryUnaryCall[greeting_pb2.GreetRequest, greeting_pb2.GreetResponse]:...
 ```

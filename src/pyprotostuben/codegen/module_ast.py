@@ -14,7 +14,7 @@ from pyprotostuben.protobuf.visitor.dfs import DFSWalkingProtoVisitor
 class ModuleASTProtoVisitorDecoratorFactory(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def create_proto_visitor_decorator(self, modules: t.MutableMapping[Path, ast.Module]) -> ProtoVisitorDecorator:
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class ModuleASTBasedProtoFileGenerator(ProtoFileGenerator, LoggerMixin):

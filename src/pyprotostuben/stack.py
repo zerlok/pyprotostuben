@@ -10,11 +10,11 @@ V_co = t.TypeVar("V_co", covariant=True)
 class Stack(t.Generic[V_co], t.Sequence[V_co], metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def get_head(self) -> V_co:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def get_last(self) -> V_co:
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class MutableStack(Stack[T]):
@@ -37,6 +37,9 @@ class MutableStack(Stack[T]):
         elif isinstance(index, slice):
             # deque does not support slice :shrug:
             return list(islice(self.__impl, index.start, index.stop, index.step))
+
+        else:
+            raise TypeError(index)
 
     def index(
         self,

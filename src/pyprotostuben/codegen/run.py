@@ -22,7 +22,7 @@ def run_codegen(
         response = gen.run(request)
 
     except Exception as err:
-        log.warning("generator error occurred", exc_info=err)
+        log.exception("generator error occurred", exc_info=err)
 
         response = CodeGeneratorResponse(
             error=repr(err),
