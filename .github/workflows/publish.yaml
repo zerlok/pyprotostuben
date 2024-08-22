@@ -9,8 +9,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: JRubics/poetry-publish@v2.0
-        with:
-          pypi_token: ${{ secrets.PYPI_TOKEN }}
-          repository_name: pyprotostuben
-          repository_url: https://test.pypi.org/legacy/
+      - uses: actions/setup-python@v4
+      - uses: abatilo/actions-poetry@v2
+      - name: Poetry build
+        run: poetry build -n
+      - name: Poetry publish
+        run: poetry publish -n -u __token__ -p ${{ secrets.PYPI_TOKEN }}
