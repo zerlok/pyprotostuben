@@ -29,6 +29,15 @@ build-backend = "poetry.core.masonry.api"
 include = ["src/**/*.py", "tests/**/*.py"]
 line-length = 120
 
+[tool.ruff.lint]
+select = ["A", "ARG", "ASYNC", "B", "BLE", "C", "C4", "COM", "DTZ", "E", "EM", "ERA", "EXE", "F", "FLY", "G", "I",
+    "ICN", "INP", "ISC", "LOG", "N", "PERF", "PGH", "PIE", "PL", "PT", "PTH", "PYI", "Q", "R", "RSE", "RUF", "S", "SIM",
+    "SLOT", "T", "T10", "T20", "TID", "TRY", "U", "UP", "W", "YTT"]
+ignore = [
+    "RET505", # clashes with mypy exhaustiveness check
+    "S101", # allow asserts for tests checks and mypy help
+]
+
 [tool.mypy]
 files = ["src", "tests"]
 strict = true

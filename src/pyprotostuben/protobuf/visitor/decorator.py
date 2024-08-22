@@ -1,14 +1,14 @@
 import abc
 
 from google.protobuf.descriptor_pb2 import (
-    MethodDescriptorProto,
-    ServiceDescriptorProto,
-    FieldDescriptorProto,
-    OneofDescriptorProto,
     DescriptorProto,
-    EnumValueDescriptorProto,
     EnumDescriptorProto,
+    EnumValueDescriptorProto,
+    FieldDescriptorProto,
     FileDescriptorProto,
+    MethodDescriptorProto,
+    OneofDescriptorProto,
+    ServiceDescriptorProto,
 )
 
 from pyprotostuben.protobuf.visitor.abc import ProtoVisitor
@@ -17,67 +17,67 @@ from pyprotostuben.protobuf.visitor.abc import ProtoVisitor
 class ProtoVisitorDecorator(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def enter_file_descriptor_proto(self, proto: FileDescriptorProto) -> None:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def leave_file_descriptor_proto(self, proto: FileDescriptorProto) -> None:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def enter_enum_descriptor_proto(self, proto: EnumDescriptorProto) -> None:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def leave_enum_descriptor_proto(self, proto: EnumDescriptorProto) -> None:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def enter_enum_value_descriptor_proto(self, proto: EnumValueDescriptorProto) -> None:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def leave_enum_value_descriptor_proto(self, proto: EnumValueDescriptorProto) -> None:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def enter_descriptor_proto(self, proto: DescriptorProto) -> None:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def leave_descriptor_proto(self, proto: DescriptorProto) -> None:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def enter_oneof_descriptor_proto(self, proto: OneofDescriptorProto) -> None:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def leave_oneof_descriptor_proto(self, proto: OneofDescriptorProto) -> None:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def enter_field_descriptor_proto(self, proto: FieldDescriptorProto) -> None:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def leave_field_descriptor_proto(self, proto: FieldDescriptorProto) -> None:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def enter_service_descriptor_proto(self, proto: ServiceDescriptorProto) -> None:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def leave_service_descriptor_proto(self, proto: ServiceDescriptorProto) -> None:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def enter_method_descriptor_proto(self, proto: MethodDescriptorProto) -> None:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def leave_method_descriptor_proto(self, proto: MethodDescriptorProto) -> None:
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 class EnterProtoVisitorDecorator(ProtoVisitorDecorator):

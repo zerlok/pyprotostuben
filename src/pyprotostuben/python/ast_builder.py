@@ -1,3 +1,6 @@
+# Skip `too many arguments rule`, because it is a builder. Methods are invoked with key only args.
+# ruff: noqa: PLR0913
+
 import abc
 import ast
 import enum
@@ -25,10 +28,10 @@ class FuncArgInfo:
 class DependencyResolver(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def resolve(self, info: TypeInfo) -> TypeInfo:
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
-class ASTBuilder(metaclass=abc.ABCMeta):
+class ASTBuilder:
     def __init__(self, resolver: DependencyResolver) -> None:
         self.__resolver = resolver
 
@@ -121,7 +124,7 @@ class ASTBuilder(metaclass=abc.ABCMeta):
                         # ast typing says that `value` is required position arg, but no
                         # type: ignore[call-arg]
                     ),
-                )
+                ),
             ],
             # Seems like it is allowed to pass `None`, but ast typing says it isn't
             lineno=t.cast(int, None),

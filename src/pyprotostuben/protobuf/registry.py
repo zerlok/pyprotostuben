@@ -1,6 +1,5 @@
 import typing as t
 from dataclasses import dataclass
-from functools import cache
 
 from google.protobuf.descriptor_pb2 import FieldDescriptorProto, MethodDescriptorProto
 
@@ -37,6 +36,22 @@ class MapEntryPlaceholder:
     module: ModuleInfo
     key: FieldDescriptorProto
     value: FieldDescriptorProto
+
+
+class RegistryError(Exception):
+    pass
+
+
+class InvalidMessageInfoError(RegistryError):
+    pass
+
+
+class InvalidMapEntryKeyError(RegistryError):
+    pass
+
+
+class InvalidMapEntryValueError(RegistryError):
+    pass
 
 
 class TypeRegistry:
@@ -77,21 +92,20 @@ class TypeRegistry:
     def resolve_proto_message(self, ref: str) -> MessageInfo:
         info = self.__user_types[ref]
         if not isinstance(info, MessageInfo):
-            raise ValueError("invalid method input type", info, ref)
+            raise InvalidMessageInfoError(info, ref)
 
         return info
 
-    @cache
     def resolve_proto_map_entry(self, ref: str) -> MapEntryInfo:
         map_entry = self.__map_entries[ref]
 
         key = self.resolve_proto_field(map_entry.key)
         if not isinstance(key, (ScalarInfo, EnumInfo, MessageInfo)):
-            raise ValueError("invalid key info", key)
+            raise InvalidMapEntryKeyError(key, ref)
 
         value = self.resolve_proto_field(map_entry.value)
         if not isinstance(value, (ScalarInfo, EnumInfo, MessageInfo)):
-            raise ValueError("invalid value info", value)
+            raise InvalidMapEntryValueError(value, ref)
 
         return MapEntryInfo(map_entry.module, key, value)
 

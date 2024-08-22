@@ -5,7 +5,7 @@ from functools import cached_property
 
 from pyprotostuben.protobuf.registry import MessageInfo
 from pyprotostuben.python.ast_builder import ASTBuilder
-from pyprotostuben.python.info import ModuleInfo, TypeInfo, PackageInfo
+from pyprotostuben.python.info import ModuleInfo, PackageInfo, TypeInfo
 
 
 @dataclass(frozen=True)
@@ -145,26 +145,26 @@ class GRPCASTBuilder:
                 info.server_output,
             )
 
-        elif not info.client_streaming and info.server_streaming:
+        if not info.client_streaming and info.server_streaming:
             return (
                 info.client_input,
                 self.build_grpc_streaming_ref(info.server_output),
             )
 
-        elif info.client_streaming and not info.server_streaming:
+        if info.client_streaming and not info.server_streaming:
             return (
                 self.build_grpc_streaming_ref(info.client_input),
                 info.server_output,
             )
 
-        elif info.client_streaming and info.server_streaming:
+        if info.client_streaming and info.server_streaming:
             return (
                 self.build_grpc_streaming_ref(info.client_input),
                 self.build_grpc_streaming_ref(info.server_output),
             )
 
-        else:
-            raise ValueError("invalid method streaming options", info)
+        msg = "invalid method streaming options"
+        raise ValueError(msg, info)
 
     def build_grpc_servicer_registrator_def(self, name: str, servicer: ast.expr) -> ast.stmt:
         return self.inner.build_func_stub(
@@ -236,23 +236,23 @@ class GRPCASTBuilder:
                 self.inner.build_generic_ref(self.grpc_unary_unary_call_ref, info.client_input, info.server_output),
             )
 
-        elif not info.client_streaming and info.server_streaming:
+        if not info.client_streaming and info.server_streaming:
             return (
                 info.client_input,
                 self.inner.build_generic_ref(self.grpc_unary_stream_call_ref, info.client_input, info.server_output),
             )
 
-        elif info.client_streaming and not info.server_streaming:
+        if info.client_streaming and not info.server_streaming:
             return (
                 self.build_grpc_streaming_ref(info.client_input),
                 self.inner.build_generic_ref(self.grpc_stream_unary_call_ref, info.client_input, info.server_output),
             )
 
-        elif info.client_streaming and info.server_streaming:
+        if info.client_streaming and info.server_streaming:
             return (
                 self.build_grpc_streaming_ref(info.client_input),
                 self.inner.build_generic_ref(self.grpc_stream_stream_call_ref, info.client_input, info.server_output),
             )
 
-        else:
-            raise ValueError("invalid method streaming options", info)
+        msg = "invalid method streaming options"
+        raise ValueError(msg, info)

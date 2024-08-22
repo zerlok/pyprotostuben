@@ -3,24 +3,24 @@ from dataclasses import dataclass
 
 from google.protobuf.compiler.plugin_pb2 import CodeGeneratorRequest
 from google.protobuf.descriptor_pb2 import (
-    FileDescriptorProto,
+    DescriptorProto,
     EnumDescriptorProto,
     EnumValueDescriptorProto,
-    DescriptorProto,
-    OneofDescriptorProto,
-    MethodDescriptorProto,
-    ServiceDescriptorProto,
     FieldDescriptorProto,
+    FileDescriptorProto,
+    MethodDescriptorProto,
+    OneofDescriptorProto,
+    ServiceDescriptorProto,
 )
 
 from pyprotostuben.logging import LoggerMixin
 from pyprotostuben.protobuf.file import ProtoFile
-from pyprotostuben.protobuf.parser import Parameters, ParameterParser
+from pyprotostuben.protobuf.parser import ParameterParser, Parameters
 from pyprotostuben.protobuf.registry import (
-    MessageInfo,
     EnumInfo,
-    TypeRegistry,
     MapEntryPlaceholder,
+    MessageInfo,
+    TypeRegistry,
 )
 from pyprotostuben.protobuf.visitor.abc import Proto, visit
 from pyprotostuben.protobuf.visitor.decorator import ProtoVisitorDecorator
@@ -71,21 +71,21 @@ class ContextBuilder(ProtoVisitorDecorator, LoggerMixin):
         self.__files[proto.name] = file
         self.__file_stack.put(file)
 
-    def leave_file_descriptor_proto(self, proto: FileDescriptorProto) -> None:
+    def leave_file_descriptor_proto(self, _: FileDescriptorProto) -> None:
         file = self.__file_stack.pop()
         self._log.debug("visited", file=file)
 
     def enter_enum_descriptor_proto(self, proto: EnumDescriptorProto) -> None:
         self.__proto_stack.put(proto)
 
-    def leave_enum_descriptor_proto(self, proto: EnumDescriptorProto) -> None:
+    def leave_enum_descriptor_proto(self, _: EnumDescriptorProto) -> None:
         self.__register_enum()
         self.__proto_stack.pop()
 
     def enter_enum_value_descriptor_proto(self, proto: EnumValueDescriptorProto) -> None:
         self.__proto_stack.put(proto)
 
-    def leave_enum_value_descriptor_proto(self, proto: EnumValueDescriptorProto) -> None:
+    def leave_enum_value_descriptor_proto(self, _: EnumValueDescriptorProto) -> None:
         self.__proto_stack.pop()
 
     def enter_descriptor_proto(self, proto: DescriptorProto) -> None:
@@ -106,25 +106,25 @@ class ContextBuilder(ProtoVisitorDecorator, LoggerMixin):
     def enter_oneof_descriptor_proto(self, proto: OneofDescriptorProto) -> None:
         self.__proto_stack.put(proto)
 
-    def leave_oneof_descriptor_proto(self, proto: OneofDescriptorProto) -> None:
+    def leave_oneof_descriptor_proto(self, _: OneofDescriptorProto) -> None:
         self.__proto_stack.pop()
 
     def enter_field_descriptor_proto(self, proto: FieldDescriptorProto) -> None:
         self.__proto_stack.put(proto)
 
-    def leave_field_descriptor_proto(self, proto: FieldDescriptorProto) -> None:
+    def leave_field_descriptor_proto(self, _: FieldDescriptorProto) -> None:
         self.__proto_stack.pop()
 
     def enter_service_descriptor_proto(self, proto: ServiceDescriptorProto) -> None:
         self.__proto_stack.put(proto)
 
-    def leave_service_descriptor_proto(self, proto: ServiceDescriptorProto) -> None:
+    def leave_service_descriptor_proto(self, _: ServiceDescriptorProto) -> None:
         self.__proto_stack.pop()
 
     def enter_method_descriptor_proto(self, proto: MethodDescriptorProto) -> None:
         self.__proto_stack.put(proto)
 
-    def leave_method_descriptor_proto(self, proto: MethodDescriptorProto) -> None:
+    def leave_method_descriptor_proto(self, _: MethodDescriptorProto) -> None:
         self.__proto_stack.pop()
 
     def __register_enum(self) -> None:
@@ -157,4 +157,5 @@ class ContextBuilder(ProtoVisitorDecorator, LoggerMixin):
             if field.name == name:
                 return field
 
-        raise ValueError("field not found", name, fields)
+        msg = "field not found"
+        raise ValueError(msg, name, fields)

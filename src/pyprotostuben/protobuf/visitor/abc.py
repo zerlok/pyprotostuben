@@ -2,14 +2,14 @@ import abc
 import typing as t
 
 from google.protobuf.descriptor_pb2 import (
-    FileDescriptorProto,
+    DescriptorProto,
     EnumDescriptorProto,
     EnumValueDescriptorProto,
-    DescriptorProto,
-    OneofDescriptorProto,
     FieldDescriptorProto,
-    ServiceDescriptorProto,
+    FileDescriptorProto,
     MethodDescriptorProto,
+    OneofDescriptorProto,
+    ServiceDescriptorProto,
 )
 
 Proto = t.Union[
@@ -27,35 +27,35 @@ Proto = t.Union[
 class ProtoVisitor(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def visit_file_descriptor_proto(self, proto: FileDescriptorProto) -> None:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_enum_descriptor_proto(self, proto: EnumDescriptorProto) -> None:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_enum_value_descriptor_proto(self, proto: EnumValueDescriptorProto) -> None:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_descriptor_proto(self, proto: DescriptorProto) -> None:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_oneof_descriptor_proto(self, proto: OneofDescriptorProto) -> None:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_field_descriptor_proto(self, proto: FieldDescriptorProto) -> None:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_service_descriptor_proto(self, proto: ServiceDescriptorProto) -> None:
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abc.abstractmethod
     def visit_method_descriptor_proto(self, proto: MethodDescriptorProto) -> None:
-        raise NotImplementedError()
+        raise NotImplementedError
 
 
 def visit(visitor: ProtoVisitor, *protos: Proto) -> None:

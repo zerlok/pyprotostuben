@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from functools import cached_property
 from itertools import chain
 
-from pyprotostuben.protobuf.registry import ProtoInfo, MapEntryInfo
+from pyprotostuben.protobuf.registry import MapEntryInfo, ProtoInfo
 from pyprotostuben.python.ast_builder import ASTBuilder, TypeRef
 from pyprotostuben.python.info import ModuleInfo, PackageInfo, TypeInfo
 
@@ -112,7 +112,7 @@ class MessageASTBuilder:
                     else None,
                 )
                 for field in fields
-            ]
+            ],
         )
 
     def build_protobuf_message_field_stubs(self, fields: t.Sequence[FieldInfo]) -> t.Sequence[ast.stmt]:
@@ -125,7 +125,7 @@ class MessageASTBuilder:
                 if self.__mutable
                 else (self.inner.build_property_getter_stub(name=field.name, annotation=field.annotation),)
                 for field in fields
-            )
+            ),
         )
 
     def build_protobuf_message_has_field_method_stub(self, fields: t.Sequence[FieldInfo]) -> ast.stmt:
@@ -137,7 +137,7 @@ class MessageASTBuilder:
                 self.inner.build_pos_arg(
                     name="field_name",
                     annotation=self.inner.build_literal_ref(*optional_field_names),
-                )
+                ),
             ],
             returns=self.inner.build_bool_ref() if optional_field_names else self.inner.build_no_return_ref(),
         )

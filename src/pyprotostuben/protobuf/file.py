@@ -4,7 +4,7 @@ from pathlib import Path
 
 from google.protobuf.descriptor_pb2 import FileDescriptorProto
 
-from pyprotostuben.python.info import PackageInfo, ModuleInfo
+from pyprotostuben.python.info import ModuleInfo, PackageInfo
 
 
 class ProtoFile:
@@ -35,7 +35,6 @@ class ProtoFile:
             return None
 
         return PackageInfo.build(*package_parts)
-        # return PackageInfo.build(*(package_parts[1:] if package_parts[0] == "" else package_parts))
 
     @ft.cached_property
     def pb2_message(self) -> ModuleInfo:

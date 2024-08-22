@@ -7,10 +7,10 @@ from google.protobuf.descriptor_pb2 import GeneratedCodeInfo
 from pyprotostuben.codegen.abc import ProtocPlugin, ProtoFileGenerator
 from pyprotostuben.codegen.module_ast import ModuleASTBasedProtoFileGenerator
 from pyprotostuben.codegen.mypy.generator import MypyStubASTGeneratorFactory
-from pyprotostuben.logging import LoggerMixin, Logger
+from pyprotostuben.logging import Logger, LoggerMixin
 from pyprotostuben.pool.abc import Pool
-from pyprotostuben.pool.process import SingleProcessPool, MultiProcessPool
-from pyprotostuben.protobuf.context import ContextBuilder, CodeGeneratorContext
+from pyprotostuben.pool.process import MultiProcessPool, SingleProcessPool
+from pyprotostuben.protobuf.context import CodeGeneratorContext, ContextBuilder
 
 
 # TODO: support such options (disabled by default):

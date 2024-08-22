@@ -4,7 +4,7 @@ import os
 import re
 import typing as t
 from functools import cached_property
-from logging import LogRecord, LoggerAdapter, getLogger, Formatter
+from logging import Formatter, LoggerAdapter, LogRecord, getLogger
 from logging.config import dictConfig
 from pathlib import Path
 
@@ -25,7 +25,8 @@ class Logger(
                     },
                     "verbose": {
                         "()": SoftFormatter,
-                        "fmt": "%(asctime)-25s %(levelname)-10s %(process)-10s [%(name)s %(self)s %(funcName)s] %(message)s %(details)s",
+                        "fmt": "%(asctime)-25s %(levelname)-10s %(process)-10s [%(name)s %(self)s %(funcName)s] "
+                        "%(message)s %(details)s",
                     },
                 },
                 "handlers": {
@@ -50,7 +51,12 @@ class Logger(
 
     # noinspection PyMethodParameters
     @classmethod
-    def get(__cls, __name: str, **kwargs: object) -> "Logger":
+    def get(
+        # allow callee to pass custom `cls` kwarg
+        __cls,  # noqa: N804
+        __name: str,
+        **kwargs: object,
+    ) -> "Logger":
         return __cls(getLogger(__name), kwargs)
 
     def process(
@@ -93,6 +99,6 @@ class SoftFormatter(Formatter):
         self.__defaults = defaults or {}
         self.__fields: t.Sequence[str] = re.findall(r"%\((?P<field>\w+)\)", fmt) if fmt is not None else []
 
-    def formatMessage(self, record: LogRecord) -> str:
+    def formatMessage(self, record: LogRecord) -> str:  # noqa: N802
         assert self._fmt is not None
         return self._fmt % {field: getattr(record, field, self.__defaults.get(field, "")) for field in self.__fields}

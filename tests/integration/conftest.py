@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 from _pytest.fixtures import SubRequest
 from google.protobuf.compiler.plugin_pb2 import CodeGeneratorRequest, CodeGeneratorResponse
-
 from pyprotostuben.codegen.abc import ProtocPlugin
 from pyprotostuben.codegen.mypy.plugin import MypyStubProtocPlugin
 
@@ -46,7 +45,7 @@ def case(request: SubRequest, tmp_path: Path) -> Case:
 
 def _read_request(proto_dir: Path, tmp_path: Path) -> CodeGeneratorRequest:
     echo_result = subprocess.run(
-        [
+        [  # noqa: S603,S607
             "protoc",
             f"-I{proto_dir}",
             f"--echo_out={tmp_path}",
@@ -54,15 +53,14 @@ def _read_request(proto_dir: Path, tmp_path: Path) -> CodeGeneratorRequest:
         ],
         stderr=subprocess.PIPE,
         encoding="utf-8",
+        check=False,
     )
 
     if echo_result.returncode != 0:
         pytest.fail(echo_result.stderr)
 
     with (tmp_path / "request.json").open("r") as echo_out:
-        request = CodeGeneratorRequest(**json.load(echo_out))
-
-    return request
+        return CodeGeneratorRequest(**json.load(echo_out))
 
 
 def _load_content(path: Path) -> str:
