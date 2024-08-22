@@ -7,11 +7,6 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        # TODO: enable for all supported versions
-        python_version: [ "3.9" ]
     steps:
       - uses: actions/checkout@v4
       - uses: JRubics/poetry-publish@v2.0
