@@ -16,7 +16,7 @@ jobs:
         buf-version: [ "1.31.0" ]
     steps:
       - uses: actions/checkout@v4
-      - name: Install Python
+      - name: Install Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
@@ -35,14 +35,18 @@ jobs:
           key: venv-${{ hashFiles('poetry.lock') }}
       - name: Install the project dependencies
         run: poetry install --all-extras
-      - name: Install protoc
+      - name: Download protoc ${{ matrix.protoc-version }}
         run: |-
-          wget -qO protoc.zip "https://github.com/protocolbuffers/protobuf/releases/download/v${{ matrix.protoc-version }}/protoc-${{ matrix.protoc-version }}-linux-x86_64.zip"
-          && unzip -q protoc.zip 'bin/*' 'include/google/protobuf/*' -d .venv
-      - name: Install buf
+          wget -qO protoc.zip
+          "https://github.com/protocolbuffers/protobuf/releases/download/v${{ matrix.protoc-version }}/protoc-${{ matrix.protoc-version }}-linux-x86_64.zip"
+      - name: Unzip protoc ${{ matrix.protoc-version }}
+        run: unzip -q protoc.zip 'bin/*' 'include/google/protobuf/*' -d .venv
+      - name: Download buf ${{ matrix.buf-version }}
         run: |-
-          wget -qO .venv/bin/buf "https://github.com/bufbuild/buf/releases/download/v${{ matrix.buf-version }}/buf-Linux-x86_64"
-          && chmod +x .venv/bin/buf
+          wget -qO .venv/bin/buf
+          "https://github.com/bufbuild/buf/releases/download/v${{ matrix.buf-version }}/buf-Linux-x86_64"
+      - name: Allow run buf ${{ matrix.buf-version }}
+        run: chmod +x .venv/bin/buf
       - name: Run mypy
         run: poetry run mypy
       - name: Run pytest
