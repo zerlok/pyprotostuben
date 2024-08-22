@@ -256,14 +256,14 @@ class ASTBuilder:
 
         return ast.Subscript(value=self.build_ref(generic), slice=ast.Tuple(elts=[self.build_ref(arg) for arg in args]))
 
-    def build_mapping_ref(self, key: TypeRef, value: TypeRef, mutable: bool = False) -> ast.expr:
+    def build_mapping_ref(self, key: TypeRef, value: TypeRef, *, mutable: bool = False) -> ast.expr:
         return self.build_generic_ref(
             TypeInfo.build(self.typing_module, "MutableMapping" if mutable else "Mapping"),
             key,
             value,
         )
 
-    def build_sequence_ref(self, inner: TypeRef, mutable: bool = False) -> ast.expr:
+    def build_sequence_ref(self, inner: TypeRef, *, mutable: bool = False) -> ast.expr:
         return self.build_generic_ref(
             TypeInfo.build(self.typing_module, "MutableSequence" if mutable else "Sequence"),
             inner,

@@ -21,6 +21,7 @@ class GRPCASTBuilder:
     def __init__(
         self,
         inner: ASTBuilder,
+        *,
         is_sync: bool,
         skip_servicer: bool,
         skip_stub: bool,

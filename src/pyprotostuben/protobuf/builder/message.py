@@ -23,6 +23,7 @@ class MessageASTBuilder:
     def __init__(
         self,
         inner: ASTBuilder,
+        *,
         mutable: bool,
         all_init_args_optional: bool,
     ) -> None:
