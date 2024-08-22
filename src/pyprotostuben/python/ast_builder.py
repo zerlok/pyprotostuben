@@ -84,9 +84,8 @@ class ASTBuilder:
         is_async: bool = False,
     ) -> ast.stmt:
         if is_async:
-            return ast.AsyncFunctionDef(
-                type_comment=None,
-                type_params=[],
+            return ast.AsyncFunctionDef(  # type: ignore[call-overload,no-any-return,unused-ignore]
+                # type_comment and type_params has default value each in 3.12 and not available in 3.9
                 name=name,
                 args=self._build_func_args(args),
                 body=self._build_stub_body(),
@@ -96,9 +95,8 @@ class ASTBuilder:
                 lineno=t.cast(int, None),
             )
 
-        return ast.FunctionDef(
-            type_comment=None,
-            type_params=[],
+        return ast.FunctionDef(  # type: ignore[call-overload,no-any-return,unused-ignore]
+            # type_comment and type_params has default value each in 3.12 and not available in 3.9
             name=name,
             decorator_list=self._build_decorators(decorators),
             args=self._build_func_args(args),
@@ -117,8 +115,8 @@ class ASTBuilder:
         keywords: t.Optional[t.Mapping[str, TypeRef]] = None,
         body: t.Optional[t.Sequence[ast.stmt]] = None,
     ) -> ast.ClassDef:
-        return ast.ClassDef(
-            type_params=[],
+        # type_params has default value in 3.12 and not available in 3.9
+        return ast.ClassDef(  # type: ignore[call-arg,unused-ignore]
             name=name,
             decorator_list=self._build_decorators(decorators),
             bases=[self.build_ref(base) for base in (bases or ())],
