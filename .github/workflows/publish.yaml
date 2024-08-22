@@ -7,11 +7,13 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v4
       - uses: abatilo/actions-poetry@v2
       - name: Poetry build
         run: poetry build -n
-      - name: Poetry publish
-        run: poetry publish -n -u __token__ -p ${{ secrets.PYPI_TOKEN }}
+      - name: Publish package distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
