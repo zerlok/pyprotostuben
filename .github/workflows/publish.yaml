@@ -1,0 +1,22 @@
+name: Publish Python Package
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # TODO: enable for all supported versions
+        python-version: [ "3.9" ]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: JRubics/poetry-publish@v2.0
+        with:
+          python_version: ${{ matrix.python-version }}
+          pypi_token: ${{ secrets.PYPI_TOKEN }}
+          repository_name: testpypi
+          repository_url: https://test.pypi.org/legacy/
