@@ -43,7 +43,7 @@ class Logger(
                     },
                 },
                 "root": {
-                    "level": os.getenv("LOGGING_LEVEL", "INFO").strip().upper(),
+                    "level": os.getenv("LOGGING_LEVEL", "WARNING").strip().upper(),
                     "handlers": ["stderr"],
                 },
             }
