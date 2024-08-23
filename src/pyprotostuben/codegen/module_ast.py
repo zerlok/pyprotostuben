@@ -4,7 +4,7 @@ import typing as t
 from pathlib import Path
 
 from pyprotostuben.codegen.abc import ProtoFileGenerator
-from pyprotostuben.logging import LoggerMixin, Logger
+from pyprotostuben.logging import Logger, LoggerMixin
 from pyprotostuben.protobuf.file import ProtoFile
 from pyprotostuben.protobuf.visitor.abc import visit
 from pyprotostuben.protobuf.visitor.decorator import ProtoVisitorDecorator
