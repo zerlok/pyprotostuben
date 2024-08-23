@@ -8,7 +8,11 @@ from logging import Formatter, LoggerAdapter, LogRecord, getLogger
 from logging.config import dictConfig
 from pathlib import Path
 
-from typing_extensions import Self
+if t.TYPE_CHECKING:
+    from typing_extensions import Self
+
+else:
+    Self = t.Any
 
 
 class Logger(
@@ -39,7 +43,7 @@ class Logger(
                     },
                 },
                 "root": {
-                    "level": os.getenv("LOGGING_LEVEL", "INFO").strip().upper(),
+                    "level": os.getenv("LOGGING_LEVEL", "WARNING").strip().upper(),
                     "handlers": ["stderr"],
                 },
             }

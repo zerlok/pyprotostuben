@@ -50,7 +50,7 @@ class ContextBuilder(ProtoVisitorDecorator, LoggerMixin):
         return CodeGeneratorContext(
             request=request,
             params=parser.parse(request.parameter),
-            files=[files[file.name] for file in request.proto_file],
+            files=[files[name] for name in request.file_to_generate],
             registry=TypeRegistry(infos, map_entries),
         )
 
