@@ -227,7 +227,6 @@ class GRPCASTBuilder:
                 ),
             ],
             returns=response,
-            is_async=not self.__is_sync,
         )
 
     def build_grpc_stub_method_request_response_refs(self, info: MethodInfo) -> t.Tuple[ast.expr, ast.expr]:
