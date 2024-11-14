@@ -8,4 +8,21 @@ updates:
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
-      interval: "monthly"
+      interval: "weekly"
+      day: sunday
+      time: "12:00"
+    reviewers:
+      - "zerlok"
+    groups:
+      main-dependencies:
+        applies-to: version-updates
+        dependency-type: production
+        patterns:
+          - "^protobuf$"
+      dev-dependencies:
+        applies-to: version-updates
+        dependency-type: development
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "^protobuf$"
