@@ -15,7 +15,7 @@ protobuf = "^5.28.3"
 
 [tool.poetry.group.dev.dependencies]
 types-protobuf = "^5.28.3.20241030"
-mypy = "^1.10.0"
+mypy = "^1.13.0"
 pytest = "^8.2.0"
 pytest-cov = "^5.0.0"
 ruff = "^0.4.9"
