@@ -15,10 +15,10 @@ protobuf = "^5.28.3"
 
 [tool.poetry.group.dev.dependencies]
 types-protobuf = "^5.28.3.20241030"
-mypy = "^1.10.0"
-pytest = "^8.2.0"
-pytest-cov = "^5.0.0"
-ruff = "^0.4.9"
+mypy = "^1.13.0"
+pytest = "^8.3.3"
+pytest-cov = "^6.0.0"
+ruff = "^0.7.3"
 grpc-stubs = "^1.53.0.5"
 
 [build-system]
