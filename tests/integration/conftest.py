@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from _pytest.fixtures import SubRequest
 from google.protobuf.compiler.plugin_pb2 import CodeGeneratorRequest, CodeGeneratorResponse
+
 from pyprotostuben.codegen.abc import ProtocPlugin
 from pyprotostuben.codegen.mypy.plugin import MypyStubProtocPlugin
 
@@ -44,8 +45,10 @@ def case(request: SubRequest, tmp_path: Path) -> Case:
 
 
 def _read_request(proto_dir: Path, tmp_path: Path) -> CodeGeneratorRequest:
-    echo_result = subprocess.run(
-        [  # noqa: S603,S607
+    # NOTE: need to execute `protoc` that can be installed in local virtual env to get protoc plugin request to pass it
+    # to `CodeGeneratorPlugin` in tests.
+    echo_result = subprocess.run(  # noqa: S603
+        [  # noqa: S607
             "protoc",
             f"-I{proto_dir}",
             f"--echo_out={tmp_path}",

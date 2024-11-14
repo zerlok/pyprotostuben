@@ -1,13 +1,19 @@
 # pyprotostuben
 
+[![Python Supported versions](https://img.shields.io/pypi/pyversions/pyprotostuben.svg)](https://pypi.python.org/pypi/pyprotostuben)
+[![MyPy Strict](https://img.shields.io/badge/mypy-strict-blue)](https://mypy.readthedocs.io/en/stable/getting_started.html#strict-mode-and-configuration)
+[![Test Coverage](https://codecov.io/gh/zerlok/pyprotostuben/branch/main/graph/badge.svg)](https://codecov.io/gh/zerlok/pyprotostuben)
+[![Downloads](https://img.shields.io/pypi/dm/pyprotostuben.svg)](https://pypistats.org/packages/pyprotostuben)
+[![GitHub stars](https://img.shields.io/github/stars/zerlok/pyprotostuben)](https://github.com/zerlok/pyprotostuben/stargazers)
+
 Generates Python MyPy stub modules from protobuf files.
 
 ## usage
 
-install
+install into dev dependencies group
 
 ```bash
-poetry add pyprotostuben
+poetry add --group dev pyprotostuben
 ```
 
 ### protoc-gen-pyprotostuben
