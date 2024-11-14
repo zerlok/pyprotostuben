@@ -11,7 +11,11 @@ from pyprotostuben.codegen.abc import ProtocPlugin
 from pyprotostuben.codegen.mypy.plugin import MypyStubProtocPlugin
 
 CASES_DIR = Path(__file__).parent / "cases"
-CASES = [pytest.param(path, id=str(path.relative_to(CASES_DIR))) for path in sorted(CASES_DIR.iterdir())]
+CASES = [
+    pytest.param(path, id=str(path.relative_to(CASES_DIR)))
+    for path in sorted(CASES_DIR.iterdir())
+    if path.is_dir() and path.stem != "__pycache__" and (path / "proto").is_dir()
+]
 
 
 @dataclass(frozen=True)
