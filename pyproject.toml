@@ -11,7 +11,7 @@ protoc-gen-echo = "pyprotostuben.protoc:echo"
 
 [tool.poetry.dependencies]
 python = "^3.9"
-protobuf = "^5.26.1"
+protobuf = "^5.28.3"
 
 [tool.poetry.group.dev.dependencies]
 types-protobuf = "^5.28.3.20241030"
