@@ -6,7 +6,7 @@
 [![Downloads](https://img.shields.io/pypi/dm/pyprotostuben.svg)](https://pypistats.org/packages/pyprotostuben)
 [![GitHub stars](https://img.shields.io/github/stars/zerlok/pyprotostuben)](https://github.com/zerlok/pyprotostuben/stargazers)
 
-Generates Python MyPy stub modules from protobuf files.
+Generate Python MyPy stub modules from protobuf files.
 
 ## usage
 

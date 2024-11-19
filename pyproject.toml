@@ -1,9 +1,16 @@
 [tool.poetry]
 name = "pyprotostuben"
-version = "0.1.2"
-description = ""
+version = "0.1.3"
+description = "Generate Python MyPy stub modules from protobuf files."
 authors = ["zerlok <danil.troshnev@gmail.com>"]
 readme = "README.md"
+license = "MIT"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Code Generators",
+    "Typing :: Typed",
+]
 
 [tool.poetry.scripts]
 protoc-gen-pyprotostuben = "pyprotostuben.protoc:gen_mypy_stub"
