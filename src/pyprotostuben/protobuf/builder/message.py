@@ -50,7 +50,7 @@ class MessageASTBuilder:
         return TypeInfo.build(self.inner.typing_module, "MutableMapping" if self.__mutable else "Mapping")
 
     def build_protobuf_message_module(self, deps: t.Collection[ModuleInfo], body: t.Sequence[ast.stmt]) -> ast.Module:
-        return self.inner.build_module(deps, body) if body else self.inner.build_module([], [])
+        return self.inner.build_module(deps=deps, body=body) if body else self.inner.build_module()
 
     def build_protobuf_message_def(
         self,

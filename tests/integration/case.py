@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from google.protobuf.compiler.plugin_pb2 import CodeGeneratorRequest, CodeGeneratorResponse
+
 from pyprotostuben.codegen.abc import ProtocPlugin
 
 
@@ -74,8 +75,10 @@ def read_request(proto_source: Path, proto_paths: t.Iterable[Path], tmp_path: Pa
     if not protoc:
         pytest.fail("can't find protoc")
 
-    echo_result = subprocess.run(
-        [  # noqa: S603
+    # NOTE: need to execute `protoc` that can be installed in local virtual env to get protoc plugin request to pass it
+    # to `CodeGeneratorPlugin` in tests.
+    echo_result = subprocess.run(  # noqa: S603
+        [
             protoc,
             f"-I{proto_source}",
             f"--echo_out={tmp_path}",
