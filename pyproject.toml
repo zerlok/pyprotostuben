@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "pyprotostuben"
 version = "0.1.2"
-description = ""
+description = "Generate Python MyPy stub modules from protobuf files."
 authors = ["zerlok <danil.troshnev@gmail.com>"]
 readme = "README.md"
 
