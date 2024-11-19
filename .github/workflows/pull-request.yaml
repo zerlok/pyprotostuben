@@ -4,8 +4,44 @@ on:
   pull_request:
     branches:
       - main
+  push:
+    branches:
+      - main
 
 jobs:
+  static:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [ "3.9", "3.10", "3.11", "3.12" ]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+        # see details (matrix, python-version, python-version-file, etc.)
+        # https://github.com/actions/setup-python
+      - name: Install poetry
+        uses: abatilo/actions-poetry@v2
+      - name: Setup a local virtual environment (if no poetry.toml file)
+        run: |
+          poetry config virtualenvs.create true --local
+          poetry config virtualenvs.in-project true --local
+      - uses: actions/cache@v3
+        name: Define a cache for the virtual environment based on the dependencies lock file
+        with:
+          path: ./.venv
+          key: venv-${{ hashFiles('poetry.lock') }}
+      - name: Install the project dependencies
+        run: poetry install --all-extras
+      - name: Run mypy
+        run: poetry run mypy
+      - name: Run ruff check
+        run: poetry run ruff check
+      - name: Run ruff format
+        run: poetry run ruff format --check
   test:
     runs-on: ubuntu-latest
     strategy:
@@ -43,11 +79,9 @@ jobs:
         run: wget -q -O .venv/bin/buf "https://github.com/bufbuild/buf/releases/download/v${{ matrix.buf-version }}/buf-Linux-x86_64"
       - name: Allow run buf ${{ matrix.buf-version }}
         run: chmod +x .venv/bin/buf
-      - name: Run mypy
-        run: poetry run mypy
       - name: Run pytest
-        run: poetry run pytest
-      - name: Run ruff format
-        run: poetry run ruff format --check
-      - name: Run ruff format
-        run: poetry run ruff format --check
+        run: poetry run pytest --cov-report=xml
+      - name: Upload results to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}

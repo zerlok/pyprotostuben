@@ -18,7 +18,7 @@ types-protobuf = "^5.28.3.20241030"
 mypy = "^1.13.0"
 pytest = "^8.3.3"
 pytest-cov = "^6.0.0"
-ruff = "^0.7.3"
+ruff = "^0.7.4"
 grpc-stubs = "^1.53.0.5"
 
 [build-system]
