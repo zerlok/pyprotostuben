@@ -1,5 +1,5 @@
 from pyprotostuben.codegen.mypy.plugin import MypyStubProtocPlugin
 
-from tests.integration.case import SimpleCaseProvider
+from tests.integration.case import DirCaseProvider
 
-mypy_case = SimpleCaseProvider(__file__, MypyStubProtocPlugin())
+mypy_case = DirCaseProvider(__file__, MypyStubProtocPlugin())

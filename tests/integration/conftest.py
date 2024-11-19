@@ -1,5 +1,5 @@
-import typing as t
 import importlib
+import inspect
 from pathlib import Path
 
 import pytest
@@ -13,9 +13,9 @@ CASE_PATHS = sorted(path for path in CASES_DIR.iterdir() if (path / "case.py").i
 
 @pytest.fixture(
     params=[
-        pytest.param(obj, id=f"{path.name}/{name}")
+        pytest.param(obj, id=f"group={path.name}; name={name}")
         for path in CASE_PATHS
-        for name, obj in importlib.import_module(f"tests.integration.cases.{path.name}.case").__dict__.items()
+        for name, obj in inspect.getmembers(importlib.import_module(f"tests.integration.cases.{path.name}.case"))
         if isinstance(obj, CaseProvider)
     ]
 )

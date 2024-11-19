@@ -1,6 +1,6 @@
 import abc
-import importlib
 import json
+import shutil
 import subprocess
 import typing as t
 from dataclasses import dataclass
@@ -24,8 +24,9 @@ class CaseProvider(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
 
-class SimpleCaseProvider(CaseProvider):
-    def __init__(
+class DirCaseProvider(CaseProvider):
+    # NOTE: case provider constructor has many settings, no need to add extra class.
+    def __init__(  # noqa: PLR0913
         self,
         filename: str,
         plugin: ProtocPlugin,
@@ -62,15 +63,20 @@ class SimpleCaseProvider(CaseProvider):
             generator=self.__plugin,
             request=gen_request,
             gen_expected_files=[
-                load_expected_gen(self.__expected_gen_source, path) for path in self.__expected_gen_paths
+                load_codegen_response_file_content(self.__expected_gen_source, path)
+                for path in self.__expected_gen_paths
             ],
         )
 
 
 def read_request(proto_source: Path, proto_paths: t.Iterable[Path], tmp_path: Path) -> CodeGeneratorRequest:
+    protoc = shutil.which("protoc")
+    if not protoc:
+        pytest.fail("can't find protoc")
+
     echo_result = subprocess.run(
-        [  # noqa: S603,S607
-            "protoc",
+        [  # noqa: S603
+            protoc,
             f"-I{proto_source}",
             f"--echo_out={tmp_path}",
             *(str(proto) for proto in proto_paths),
@@ -87,27 +93,8 @@ def read_request(proto_source: Path, proto_paths: t.Iterable[Path], tmp_path: Pa
         return CodeGeneratorRequest(**json.load(echo_out))
 
 
-def load_expected_gen(source: Path, path: Path) -> CodeGeneratorResponse.File:
-    with path.open("r") as fd:
-        return CodeGeneratorResponse.File(
-            name=str(path.relative_to(source)),
-            content=fd.read(),
-        )
-
-
-def build_plugin_case(
-    plugin: ProtocPlugin,
-    proto_source: Path,
-    proto_paths: t.Iterable[Path],
-    expected_gen_source: Path,
-    expected_gen_paths: t.Iterable[Path],
-    tmp_path: Path,
-) -> Case:
-    gen_request = read_request(proto_source, proto_paths, tmp_path)
-    gen_request.parameter = "no-parallel"  # for easier debug
-
-    return Case(
-        generator=plugin,
-        request=gen_request,
-        gen_expected_files=[load_expected_gen(expected_gen_source, path) for path in expected_gen_paths],
+def load_codegen_response_file_content(source: Path, path: Path) -> CodeGeneratorResponse.File:
+    return CodeGeneratorResponse.File(
+        name=str(path.relative_to(source)),
+        content=path.read_text(),
     )

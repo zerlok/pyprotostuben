@@ -1,9 +1,5 @@
 from pyprotostuben.codegen.mypy.plugin import MypyStubProtocPlugin
 
-from tests.integration.case import SimpleCaseProvider
+from tests.integration.case import DirCaseProvider
 
-mypy_case = SimpleCaseProvider(
-    __file__,
-    MypyStubProtocPlugin(),
-    expected_gen_paths=["greeting_pb2.pyi", "greeting_pb2_grpc.pyi"],
-)
+mypy_case = DirCaseProvider(__file__, MypyStubProtocPlugin())
