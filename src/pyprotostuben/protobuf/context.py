@@ -8,7 +8,7 @@ from google.protobuf.descriptor_pb2 import (
 
 from pyprotostuben.logging import LoggerMixin
 from pyprotostuben.protobuf.file import ProtoFile
-from pyprotostuben.protobuf.parser import ParameterParser, Parameters
+from pyprotostuben.protobuf.parser import CodeGeneratorParameters, ParameterParser
 from pyprotostuben.protobuf.registry import (
     EnumInfo,
     MapEntryPlaceholder,
@@ -36,7 +36,7 @@ from pyprotostuben.python.info import ModuleInfo
 @dataclass(frozen=True)
 class CodeGeneratorContext:
     request: CodeGeneratorRequest
-    params: Parameters
+    params: CodeGeneratorParameters
     files: t.Sequence[ProtoFile]
     registry: TypeRegistry
 

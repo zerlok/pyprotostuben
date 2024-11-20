@@ -27,14 +27,14 @@ Proto = t.Union[
     MethodDescriptorProto,
 ]
 
-M = t.TypeVar("M")
+M_co = t.TypeVar("M_co", covariant=True)
 P_co = t.TypeVar("P_co", covariant=True, bound=Proto)
 T_co = t.TypeVar("T_co", covariant=True, bound=Proto)
 
 
 @dataclass(frozen=True)
-class BaseContext(t.Generic[M, T_co]):
-    meta: M
+class BaseContext(t.Generic[M_co, T_co]):
+    meta: M_co
     item: T_co
     path: t.Sequence[int]
 
@@ -44,7 +44,7 @@ class BaseContext(t.Generic[M, T_co]):
 
 
 @dataclass(frozen=True)
-class FileDescriptorContext(BaseContext[M, FileDescriptorProto]):
+class FileDescriptorContext(BaseContext[M_co, FileDescriptorProto]):
     @cached_property
     def file(self) -> ProtoFile:
         return ProtoFile(self.item)
@@ -55,11 +55,11 @@ class FileDescriptorContext(BaseContext[M, FileDescriptorProto]):
 
 
 @dataclass(frozen=True)
-class ChildContext(BaseContext[M, T_co], t.Generic[M, T_co, P_co]):
-    parent_context: BaseContext[M, P_co]
+class ChildContext(BaseContext[M_co, T_co], t.Generic[M_co, T_co, P_co]):
+    parent_context: BaseContext[M_co, P_co]
 
     @cached_property
-    def root_context(self) -> FileDescriptorContext[M]:
+    def root_context(self) -> FileDescriptorContext[M_co]:
         ctx = self.parent_context
 
         while isinstance(ctx, ChildContext):
@@ -91,35 +91,35 @@ class ChildContext(BaseContext[M, T_co], t.Generic[M, T_co, P_co]):
 
 
 @dataclass(frozen=True)
-class EnumDescriptorContext(ChildContext[M, EnumDescriptorProto, t.Union[FileDescriptorProto, DescriptorProto]]):
+class EnumDescriptorContext(ChildContext[M_co, EnumDescriptorProto, t.Union[FileDescriptorProto, DescriptorProto]]):
     pass
 
 
 @dataclass(frozen=True)
-class EnumValueDescriptorContext(ChildContext[M, EnumValueDescriptorProto, EnumDescriptorProto]):
+class EnumValueDescriptorContext(ChildContext[M_co, EnumValueDescriptorProto, EnumDescriptorProto]):
     pass
 
 
 @dataclass(frozen=True)
-class DescriptorContext(ChildContext[M, DescriptorProto, t.Union[FileDescriptorProto, DescriptorProto]]):
+class DescriptorContext(ChildContext[M_co, DescriptorProto, t.Union[FileDescriptorProto, DescriptorProto]]):
     pass
 
 
 @dataclass(frozen=True)
-class OneofDescriptorContext(ChildContext[M, OneofDescriptorProto, DescriptorProto]):
+class OneofDescriptorContext(ChildContext[M_co, OneofDescriptorProto, DescriptorProto]):
     pass
 
 
 @dataclass(frozen=True)
-class FieldDescriptorContext(ChildContext[M, FieldDescriptorProto, t.Union[FileDescriptorProto, DescriptorProto]]):
+class FieldDescriptorContext(ChildContext[M_co, FieldDescriptorProto, t.Union[FileDescriptorProto, DescriptorProto]]):
     pass
 
 
 @dataclass(frozen=True)
-class ServiceDescriptorContext(ChildContext[M, ServiceDescriptorProto, FileDescriptorProto]):
+class ServiceDescriptorContext(ChildContext[M_co, ServiceDescriptorProto, FileDescriptorProto]):
     pass
 
 
 @dataclass(frozen=True)
-class MethodDescriptorContext(ChildContext[M, MethodDescriptorProto, ServiceDescriptorProto]):
+class MethodDescriptorContext(ChildContext[M_co, MethodDescriptorProto, ServiceDescriptorProto]):
     pass
