@@ -136,7 +136,7 @@ class ASTBuilder:
             args=args,
             returns=returns,
             doc=doc,
-            body=self._build_stub_body(),
+            body=self._build_stub_body(doc),
             is_async=is_async,
             is_context_manager=is_context_manager,
         )
@@ -220,7 +220,7 @@ class ASTBuilder:
             args=args,
             returns=returns,
             doc=doc,
-            body=self._build_stub_body(),
+            body=self._build_stub_body(doc),
             is_async=is_async,
             is_context_manager=is_context_manager,
         )
@@ -315,7 +315,7 @@ class ASTBuilder:
         args: t.Sequence[FuncArgInfo],
         doc: t.Optional[str] = None,
     ) -> ast.stmt:
-        return self.build_init(args=args, body=self._build_stub_body(), doc=doc)
+        return self.build_init(args=args, body=self._build_stub_body(doc), doc=doc)
 
     def build_attr_stub(
         self,
@@ -495,15 +495,25 @@ class ASTBuilder:
     def _build_body(self, doc: t.Optional[str], body: t.Optional[t.Sequence[ast.stmt]]) -> t.List[ast.stmt]:
         result: t.List[ast.stmt] = list(body or ())
         if doc:
-            result.insert(0, ast.Expr(value=ast.Constant(doc)))
+            result.insert(0, self.build_docstring(doc))
 
         return result
 
-    def _build_stub_body(self) -> t.List[ast.stmt]:
-        return [
-            # NOTE: Ellipsis is ok for function body, but ast typing says it's not.
-            t.cast(
-                ast.stmt,
-                ast.Constant(...),
+    def build_docstring(self, *lines: str) -> ast.stmt:
+        return ast.Expr(
+            value=ast.Constant(
+                value="\n".join(lines),
             ),
-        ]
+        )
+
+    def _build_stub_body(self, doc: t.Optional[str]) -> t.List[ast.stmt]:
+        return (
+            [
+                ast.Expr(value=ast.Constant(value=...)),
+            ]
+            if doc
+            else [
+                # NOTE: Ellipsis is ok for function body, but ast typing says it's not.
+                t.cast(ast.stmt, ast.Constant(value=...))
+            ]
+        )

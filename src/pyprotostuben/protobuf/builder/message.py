@@ -49,18 +49,28 @@ class MessageASTBuilder:
     def protobuf_map_entry_ref(self) -> TypeInfo:
         return TypeInfo.build(self.inner.typing_module, "MutableMapping" if self.__mutable else "Mapping")
 
-    def build_protobuf_message_module(self, deps: t.Collection[ModuleInfo], body: t.Sequence[ast.stmt]) -> ast.Module:
-        return self.inner.build_module(deps=deps, body=body) if body else self.inner.build_module()
+    def build_protobuf_message_module(
+        self,
+        doc: t.Optional[str] = None,
+        deps: t.Optional[t.Collection[ModuleInfo]] = None,
+        body: t.Optional[t.Sequence[ast.stmt]] = None,
+    ) -> ast.Module:
+        if not body:
+            return self.inner.build_module(doc=doc)
+
+        return self.inner.build_module(doc, deps, body)
 
     def build_protobuf_message_def(
         self,
         name: str,
-        fields: t.Sequence[FieldInfo],
+        doc: t.Optional[str],
         nested: t.Sequence[ast.stmt],
+        fields: t.Sequence[FieldInfo],
     ) -> ast.stmt:
         return self.inner.build_class_def(
             name=name,
             bases=[self.protobuf_message_ref],
+            doc=doc,
             body=[
                 *nested,
                 self.build_protobuf_message_init_stub(fields),
@@ -82,11 +92,13 @@ class MessageASTBuilder:
     def build_protobuf_enum_def(
         self,
         name: str,
+        doc: t.Optional[str],
         nested: t.Sequence[ast.stmt],
     ) -> ast.ClassDef:
         return self.inner.build_class_def(
             name=name,
             bases=[self.protobuf_enum_ref],
+            doc=doc,
             body=nested,
         )
 

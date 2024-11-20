@@ -1,0 +1,60 @@
+/*
+   this is a comment to proto file
+*/
+
+syntax = "proto3";
+
+package types;
+
+// this is a leading comment to Msg1
+message Msg1 {
+  // this is a trailing comment to Msg1
+
+  // this is a leading comment to field1
+  int64 field1 = 1;
+  // this is a trailing comment to field1
+
+  // this is a leading detached comment to field2
+
+  // this is a leading comment to field2
+  string field2 = 2;
+  // this is a trailing comment to field2
+}
+
+/* this is a leading comment to Msg2 */
+message Msg2 {
+  /*
+     this is a
+     multiline
+     comment to field3
+  */
+  string name = 1;
+}
+
+// this is a multiline
+// comment
+//
+// to
+// Msg3
+message Msg3 {}
+
+// this is a comment to enum
+enum MyEnum {
+  // this is a comment to zero
+  MY_ENUM_VAL_ZERO = 0;
+
+  MY_ENUM_VAL_FIRST = 1; // this is a comment to zero
+
+  MY_ENUM_VAL_SECOND = 2;
+  // this is a comment to second
+
+  MY_ENUM_VAL_THIRD = 3;
+}
+
+// this is a comment to service
+service MyService {
+  // this is a comment to method
+  rpc Method(Msg1) returns (Msg2) {
+    // this is a trailing comment to method
+  }
+}

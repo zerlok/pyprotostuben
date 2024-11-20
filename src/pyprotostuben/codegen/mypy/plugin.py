@@ -2,6 +2,9 @@ import typing as t
 from contextlib import ExitStack
 from functools import partial
 
+if t.TYPE_CHECKING:
+    from pyprotostuben.python.info import ModuleInfo
+
 from google.protobuf.compiler.plugin_pb2 import CodeGeneratorRequest, CodeGeneratorResponse
 from google.protobuf.descriptor_pb2 import GeneratedCodeInfo
 
@@ -20,7 +23,6 @@ from pyprotostuben.protobuf.context import CodeGeneratorContext, ContextBuilder
 from pyprotostuben.protobuf.file import ProtoFile
 from pyprotostuben.protobuf.parser import CodeGeneratorParameters
 from pyprotostuben.python.ast_builder import ASTBuilder
-from pyprotostuben.python.info import ModuleInfo
 from pyprotostuben.stack import MutableStack
 
 
@@ -43,15 +45,6 @@ class MypyStubProtocPlugin(ProtocPlugin, LoggerMixin):
 
         return resp
 
-    def __build_file(self, item: GeneratedItem) -> CodeGeneratorResponse.File:
-        return CodeGeneratorResponse.File(
-            name=str(item.path),
-            generated_code_info=GeneratedCodeInfo(
-                annotation=[GeneratedCodeInfo.Annotation(source_file=str(item.source.proto_path))],
-            ),
-            content=item.content,
-        )
-
     def __create_generator(self, context: CodeGeneratorContext) -> ProtoFileGenerator:
         return ModuleASTBasedProtoFileGenerator(
             context_factory=self.__create_visitor_context,
@@ -67,6 +60,15 @@ class MypyStubProtocPlugin(ProtocPlugin, LoggerMixin):
             SingleProcessPool()
             if params.has_flag("no-parallel") or params.has_flag("debug")
             else cm_stack.enter_context(MultiProcessPool.setup())
+        )
+
+    def __build_file(self, item: GeneratedItem) -> CodeGeneratorResponse.File:
+        return CodeGeneratorResponse.File(
+            name=str(item.path),
+            generated_code_info=GeneratedCodeInfo(
+                annotation=[GeneratedCodeInfo.Annotation(source_file=str(item.source.proto_path))],
+            ),
+            content=item.content,
         )
 
     def __create_visitor_context(self, file: ProtoFile) -> MypyStubContext:

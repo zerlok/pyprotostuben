@@ -11,6 +11,7 @@ from pyprotostuben.python.info import ModuleInfo, PackageInfo, TypeInfo
 @dataclass(frozen=True)
 class MethodInfo:
     name: str
+    doc: t.Optional[str]
     client_input: ast.expr
     client_streaming: bool
     server_output: ast.expr
@@ -84,25 +85,37 @@ class GRPCASTBuilder:
     def build_grpc_module(self, deps: t.Collection[ModuleInfo], body: t.Sequence[ast.stmt]) -> ast.Module:
         return self.inner.build_module(deps=deps, body=body) if body else self.inner.build_module()
 
-    def build_grpc_servicer_defs(self, name: str, methods: t.Sequence[MethodInfo]) -> t.Sequence[ast.stmt]:
+    def build_grpc_servicer_defs(
+        self,
+        name: str,
+        doc: t.Optional[str],
+        methods: t.Sequence[MethodInfo],
+    ) -> t.Sequence[ast.stmt]:
         if self.__skip_servicer:
             return []
 
         return [
             self.inner.build_abstract_class_def(
                 name=name,
+                doc=doc,
                 body=[self.build_grpc_servicer_method_def(info) for info in methods],
             ),
             self.build_grpc_servicer_registrator_def(name, ast.Name(id=name)),
         ]
 
-    def build_grpc_stub_defs(self, name: str, methods: t.Sequence[MethodInfo]) -> t.Sequence[ast.stmt]:
+    def build_grpc_stub_defs(
+        self,
+        name: str,
+        doc: t.Optional[str],
+        methods: t.Sequence[MethodInfo],
+    ) -> t.Sequence[ast.stmt]:
         if self.__skip_stub:
             return []
 
         return [
             self.inner.build_class_def(
                 name=name,
+                doc=doc,
                 body=[
                     self.build_grpc_stub_init_def(),
                     *(self.build_grpc_stub_method_def(info) for info in methods),
@@ -136,6 +149,7 @@ class GRPCASTBuilder:
                 ),
             ],
             returns=response,
+            doc=info.doc,
             is_async=not self.__is_sync,
         )
 
@@ -227,6 +241,7 @@ class GRPCASTBuilder:
                 ),
             ],
             returns=response,
+            doc=info.doc,
         )
 
     def build_grpc_stub_method_request_response_refs(self, info: MethodInfo) -> t.Tuple[ast.expr, ast.expr]:
