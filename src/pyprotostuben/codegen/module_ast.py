@@ -6,9 +6,8 @@ from pathlib import Path
 from pyprotostuben.codegen.abc import ProtoFileGenerator
 from pyprotostuben.logging import Logger, LoggerMixin
 from pyprotostuben.protobuf.file import ProtoFile
-from pyprotostuben.protobuf.visitor.abc import visit
 from pyprotostuben.protobuf.visitor.decorator import ProtoVisitorDecorator
-from pyprotostuben.protobuf.visitor.dfs import DFSWalkingProtoVisitor
+from pyprotostuben.protobuf.visitor.walker import Walker
 
 
 class ModuleASTProtoVisitorDecoratorFactory(metaclass=abc.ABCMeta):
@@ -30,7 +29,7 @@ class ModuleASTBasedProtoFileGenerator(ProtoFileGenerator, LoggerMixin):
         generator = self.__factory.create_proto_visitor_decorator(modules)
         log = log.bind_details(generator=generator)
 
-        visit(DFSWalkingProtoVisitor(generator), file.descriptor)
+        Walker(generator).walk(file.descriptor)
         log.debug("proto visited", modules=modules)
 
         return list(self.__gen_modules(file, modules, log))
