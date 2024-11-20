@@ -98,7 +98,13 @@ class MypyStubASTGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
         parent = context.meta.messages.get_last()
         builder = parent.builder
 
-        parent.nested.append(builder.build_protobuf_enum_value_def(context.item.name, context.item.number))
+        parent.nested.extend(
+            builder.build_protobuf_enum_value_def(
+                name=context.item.name,
+                doc=self.__get_doc(context.location),
+                value=context.item.number,
+            )
+        )
 
         return context.meta
 
@@ -156,6 +162,7 @@ class MypyStubASTGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
             FieldInfo(
                 name=context.item.name,
                 annotation=annotation,
+                doc=self.__get_doc(context.location),
                 optional=is_optional,
                 default=None,
                 # TODO: support proto.default_value

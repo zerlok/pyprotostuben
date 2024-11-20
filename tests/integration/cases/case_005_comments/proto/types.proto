@@ -28,7 +28,7 @@ message Msg2 {
      multiline
      comment to field3
   */
-  string name = 1;
+  string field3 = 3;
 }
 
 // this is a multiline
@@ -43,7 +43,7 @@ enum MyEnum {
   // this is a comment to zero
   MY_ENUM_VAL_ZERO = 0;
 
-  MY_ENUM_VAL_FIRST = 1; // this is a comment to zero
+  MY_ENUM_VAL_FIRST = 1; // this is a comment to first
 
   MY_ENUM_VAL_SECOND = 2;
   // this is a comment to second

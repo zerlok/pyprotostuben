@@ -14,6 +14,7 @@ from pyprotostuben.python.info import ModuleInfo, PackageInfo, TypeInfo
 class FieldInfo:
     name: str
     annotation: ast.expr
+    doc: t.Optional[str]
     optional: bool
     default: t.Optional[ast.expr]
     oneof_group: t.Optional[str]
@@ -102,13 +103,20 @@ class MessageASTBuilder:
             body=nested,
         )
 
-    def build_protobuf_enum_value_def(self, name: str, value: object) -> ast.stmt:
-        return ast.Assign(
-            targets=[ast.Name(id=name)],
-            value=ast.Constant(value=value),
-            # Seems like it is allowed to pass `None`, but ast typing says it isn't
-            lineno=t.cast(int, None),
-        )
+    def build_protobuf_enum_value_def(self, name: str, doc: t.Optional[str], value: object) -> t.Sequence[ast.stmt]:
+        result: t.List[ast.stmt] = [
+            ast.Assign(
+                targets=[ast.Name(id=name)],
+                value=ast.Constant(value=value),
+                # Seems like it is allowed to pass `None`, but ast typing says it isn't
+                lineno=t.cast(int, None),
+            )
+        ]
+
+        if doc:
+            result.append(self.inner.build_docstring(doc))
+
+        return result
 
     def build_protobuf_message_init_stub(self, fields: t.Sequence[FieldInfo]) -> ast.stmt:
         return self.inner.build_init_stub(
@@ -132,11 +140,13 @@ class MessageASTBuilder:
         return list(
             chain.from_iterable(
                 (
-                    self.inner.build_property_getter_stub(name=field.name, annotation=field.annotation),
+                    self.inner.build_property_getter_stub(name=field.name, annotation=field.annotation, doc=field.doc),
                     self.inner.build_property_setter_stub(name=field.name, annotation=field.annotation),
                 )
                 if self.__mutable
-                else (self.inner.build_property_getter_stub(name=field.name, annotation=field.annotation),)
+                else (
+                    self.inner.build_property_getter_stub(name=field.name, annotation=field.annotation, doc=field.doc),
+                )
                 for field in fields
             ),
         )
