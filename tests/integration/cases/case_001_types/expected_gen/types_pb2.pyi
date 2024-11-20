@@ -1,6 +1,12 @@
 import builtins
+import enum
 import google.protobuf.message
 import typing
+
+class MyEnum(enum.IntEnum):
+    MY_ENUM_VAL_ZERO = 0
+    MY_ENUM_VAL_ONE = 1
+    MY_ENUM_VAL_TWO = 2
 
 class Container(google.protobuf.message.Message):
 
