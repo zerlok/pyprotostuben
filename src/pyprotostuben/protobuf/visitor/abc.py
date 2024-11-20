@@ -1,80 +1,46 @@
 import abc
-import typing as t
 
-from google.protobuf.descriptor_pb2 import (
-    DescriptorProto,
-    EnumDescriptorProto,
-    EnumValueDescriptorProto,
-    FieldDescriptorProto,
-    FileDescriptorProto,
-    MethodDescriptorProto,
-    OneofDescriptorProto,
-    ServiceDescriptorProto,
+from pyprotostuben.protobuf.visitor.model import (
+    DescriptorContext,
+    EnumDescriptorContext,
+    EnumValueDescriptorContext,
+    FieldDescriptorContext,
+    FileDescriptorContext,
+    MethodDescriptorContext,
+    OneofDescriptorContext,
+    ServiceDescriptorContext,
 )
-
-Proto = t.Union[
-    FileDescriptorProto,
-    EnumDescriptorProto,
-    EnumValueDescriptorProto,
-    DescriptorProto,
-    OneofDescriptorProto,
-    FieldDescriptorProto,
-    ServiceDescriptorProto,
-    MethodDescriptorProto,
-]
 
 
 class ProtoVisitor(metaclass=abc.ABCMeta):
     @abc.abstractmethod
-    def visit_file_descriptor_proto(self, proto: FileDescriptorProto) -> None:
+    def visit_file_descriptor_proto(self, context: FileDescriptorContext) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod
-    def visit_enum_descriptor_proto(self, proto: EnumDescriptorProto) -> None:
+    def visit_enum_descriptor_proto(self, context: EnumDescriptorContext) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod
-    def visit_enum_value_descriptor_proto(self, proto: EnumValueDescriptorProto) -> None:
+    def visit_enum_value_descriptor_proto(self, context: EnumValueDescriptorContext) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod
-    def visit_descriptor_proto(self, proto: DescriptorProto) -> None:
+    def visit_descriptor_proto(self, context: DescriptorContext) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod
-    def visit_oneof_descriptor_proto(self, proto: OneofDescriptorProto) -> None:
+    def visit_oneof_descriptor_proto(self, context: OneofDescriptorContext) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod
-    def visit_field_descriptor_proto(self, proto: FieldDescriptorProto) -> None:
+    def visit_field_descriptor_proto(self, context: FieldDescriptorContext) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod
-    def visit_service_descriptor_proto(self, proto: ServiceDescriptorProto) -> None:
+    def visit_service_descriptor_proto(self, context: ServiceDescriptorContext) -> None:
         raise NotImplementedError
 
     @abc.abstractmethod
-    def visit_method_descriptor_proto(self, proto: MethodDescriptorProto) -> None:
+    def visit_method_descriptor_proto(self, context: MethodDescriptorContext) -> None:
         raise NotImplementedError
-
-
-def visit(visitor: ProtoVisitor, *protos: Proto) -> None:
-    for proto in protos:
-        if isinstance(proto, FileDescriptorProto):
-            visitor.visit_file_descriptor_proto(proto)
-        elif isinstance(proto, EnumDescriptorProto):
-            visitor.visit_enum_descriptor_proto(proto)
-        elif isinstance(proto, EnumValueDescriptorProto):
-            visitor.visit_enum_value_descriptor_proto(proto)
-        elif isinstance(proto, DescriptorProto):
-            visitor.visit_descriptor_proto(proto)
-        elif isinstance(proto, OneofDescriptorProto):
-            visitor.visit_oneof_descriptor_proto(proto)
-        elif isinstance(proto, FieldDescriptorProto):
-            visitor.visit_field_descriptor_proto(proto)
-        elif isinstance(proto, ServiceDescriptorProto):
-            visitor.visit_service_descriptor_proto(proto)
-        elif isinstance(proto, MethodDescriptorProto):
-            visitor.visit_method_descriptor_proto(proto)
-        else:
-            t.assert_never(proto)
