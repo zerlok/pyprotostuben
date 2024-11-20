@@ -38,7 +38,10 @@ class MypyStubASTGeneratorFactory(ModuleASTProtoVisitorDecoratorFactory):
     ) -> None:
         self.__context = context
 
-    def create_proto_visitor_decorator(self, modules: t.MutableMapping[Path, ast.Module]) -> ProtoVisitorDecorator:
+    def create_proto_visitor_decorator(
+        self,
+        modules: t.MutableMapping[Path, ast.Module],
+    ) -> ProtoVisitorDecorator[object]:
         return MypyStubASTGenerator(
             registry=self.__context.registry,
             factory=self,
@@ -87,7 +90,7 @@ class MypyStubASTGeneratorFactory(ModuleASTProtoVisitorDecoratorFactory):
         )
 
 
-class MypyStubASTGenerator(ProtoVisitorDecorator, LoggerMixin):
+class MypyStubASTGenerator(ProtoVisitorDecorator[object], LoggerMixin):
     def __init__(
         self,
         registry: TypeRegistry,
@@ -100,11 +103,11 @@ class MypyStubASTGenerator(ProtoVisitorDecorator, LoggerMixin):
         self.__messages: MutableStack[MessageContext] = MutableStack()
         self.__grpcs: MutableStack[GRPCContext] = MutableStack()
 
-    def enter_file_descriptor_proto(self, context: FileDescriptorContext) -> None:
+    def enter_file_descriptor_proto(self, context: FileDescriptorContext[object]) -> None:
         self.__messages.put(self.__factory.create_file_message_context(context.file))
         self.__grpcs.put(self.__factory.create_file_grpc_context(context.file))
 
-    def leave_file_descriptor_proto(self, _: FileDescriptorContext) -> None:
+    def leave_file_descriptor_proto(self, _: FileDescriptorContext[object]) -> None:
         message = self.__messages.pop()
         grpc = self.__grpcs.pop()
 
@@ -117,33 +120,33 @@ class MypyStubASTGenerator(ProtoVisitorDecorator, LoggerMixin):
             grpc.nested,
         )
 
-    def enter_enum_descriptor_proto(self, _: EnumDescriptorContext) -> None:
+    def enter_enum_descriptor_proto(self, _: EnumDescriptorContext[object]) -> None:
         parent = self.__messages.get_last()
 
         self.__messages.put(parent.sub())
 
-    def leave_enum_descriptor_proto(self, context: EnumDescriptorContext) -> None:
+    def leave_enum_descriptor_proto(self, context: EnumDescriptorContext[object]) -> None:
         message = self.__messages.pop()
         parent = self.__messages.get_last()
         builder = message.builder
 
         parent.nested.append(builder.build_protobuf_enum_def(context.item.name, message.nested))
 
-    def enter_enum_value_descriptor_proto(self, context: EnumValueDescriptorContext) -> None:
+    def enter_enum_value_descriptor_proto(self, context: EnumValueDescriptorContext[object]) -> None:
         pass
 
-    def leave_enum_value_descriptor_proto(self, context: EnumValueDescriptorContext) -> None:
+    def leave_enum_value_descriptor_proto(self, context: EnumValueDescriptorContext[object]) -> None:
         parent = self.__messages.get_last()
         builder = parent.builder
 
         parent.nested.append(builder.build_protobuf_enum_value_def(context.item.name, context.item.number))
 
-    def enter_descriptor_proto(self, _: DescriptorContext) -> None:
+    def enter_descriptor_proto(self, _: DescriptorContext[object]) -> None:
         parent = self.__messages.get_last()
 
         self.__messages.put(parent.sub())
 
-    def leave_descriptor_proto(self, context: DescriptorContext) -> None:
+    def leave_descriptor_proto(self, context: DescriptorContext[object]) -> None:
         message = self.__messages.pop()
 
         if context.item.options.map_entry:
@@ -160,17 +163,17 @@ class MypyStubASTGenerator(ProtoVisitorDecorator, LoggerMixin):
             ),
         )
 
-    def enter_oneof_descriptor_proto(self, context: OneofDescriptorContext) -> None:
+    def enter_oneof_descriptor_proto(self, context: OneofDescriptorContext[object]) -> None:
         pass
 
-    def leave_oneof_descriptor_proto(self, context: OneofDescriptorContext) -> None:
+    def leave_oneof_descriptor_proto(self, context: OneofDescriptorContext[object]) -> None:
         info = self.__messages.get_last()
         info.oneof_groups.append(context.item.name)
 
-    def enter_field_descriptor_proto(self, context: FieldDescriptorContext) -> None:
+    def enter_field_descriptor_proto(self, context: FieldDescriptorContext[object]) -> None:
         pass
 
-    def leave_field_descriptor_proto(self, context: FieldDescriptorContext) -> None:
+    def leave_field_descriptor_proto(self, context: FieldDescriptorContext[object]) -> None:
         is_optional = context.item.proto3_optional
         message = self.__messages.get_last()
         builder = message.builder
@@ -194,12 +197,12 @@ class MypyStubASTGenerator(ProtoVisitorDecorator, LoggerMixin):
             ),
         )
 
-    def enter_service_descriptor_proto(self, _: ServiceDescriptorContext) -> None:
+    def enter_service_descriptor_proto(self, _: ServiceDescriptorContext[object]) -> None:
         parent = self.__grpcs.get_last()
 
         self.__grpcs.put(parent.sub())
 
-    def leave_service_descriptor_proto(self, context: ServiceDescriptorContext) -> None:
+    def leave_service_descriptor_proto(self, context: ServiceDescriptorContext[object]) -> None:
         grpc = self.__grpcs.pop()
         parent = self.__grpcs.get_last()
         builder = grpc.builder
@@ -207,10 +210,10 @@ class MypyStubASTGenerator(ProtoVisitorDecorator, LoggerMixin):
         parent.nested.extend(builder.build_grpc_servicer_defs(f"{context.item.name}Servicer", grpc.methods))
         parent.nested.extend(builder.build_grpc_stub_defs(f"{context.item.name}Stub", grpc.methods))
 
-    def enter_method_descriptor_proto(self, context: MethodDescriptorContext) -> None:
+    def enter_method_descriptor_proto(self, context: MethodDescriptorContext[object]) -> None:
         pass
 
-    def leave_method_descriptor_proto(self, context: MethodDescriptorContext) -> None:
+    def leave_method_descriptor_proto(self, context: MethodDescriptorContext[object]) -> None:
         grpc = self.__grpcs.get_last()
         builder = grpc.builder
 

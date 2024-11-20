@@ -41,7 +41,7 @@ class CodeGeneratorContext:
     registry: TypeRegistry
 
 
-class ContextBuilder(ProtoVisitor, LoggerMixin):
+class ContextBuilder(ProtoVisitor[object], LoggerMixin):
     @classmethod
     def build(cls, request: CodeGeneratorRequest) -> CodeGeneratorContext:
         parser = ParameterParser()
@@ -49,7 +49,7 @@ class ContextBuilder(ProtoVisitor, LoggerMixin):
         infos: t.Dict[str, t.Union[EnumInfo, MessageInfo]] = {}
         map_entries: t.Dict[str, MapEntryPlaceholder] = {}
 
-        Walker(LeaveProtoVisitorDecorator(cls(files, infos, map_entries))).walk(*request.proto_file)
+        Walker(LeaveProtoVisitorDecorator(cls(files, infos, map_entries))).walk(None, *request.proto_file)
 
         return CodeGeneratorContext(
             request=request,
@@ -68,17 +68,17 @@ class ContextBuilder(ProtoVisitor, LoggerMixin):
         self.__infos = infos
         self.__map_entries = map_entries
 
-    def visit_file_descriptor_proto(self, context: FileDescriptorContext) -> None:
+    def visit_file_descriptor_proto(self, context: FileDescriptorContext[object]) -> None:
         self.__register_file(context)
         self._log.debug("visited", file=context.file)
 
-    def visit_enum_descriptor_proto(self, context: EnumDescriptorContext) -> None:
+    def visit_enum_descriptor_proto(self, context: EnumDescriptorContext[object]) -> None:
         self.__register_enum(context)
 
-    def visit_enum_value_descriptor_proto(self, _: EnumValueDescriptorContext) -> None:
+    def visit_enum_value_descriptor_proto(self, _: EnumValueDescriptorContext[object]) -> None:
         pass
 
-    def visit_descriptor_proto(self, context: DescriptorContext) -> None:
+    def visit_descriptor_proto(self, context: DescriptorContext[object]) -> None:
         proto = context.item
 
         if proto.options.map_entry:
@@ -91,28 +91,28 @@ class ContextBuilder(ProtoVisitor, LoggerMixin):
         else:
             self.__register_message(context)
 
-    def visit_oneof_descriptor_proto(self, _: OneofDescriptorContext) -> None:
+    def visit_oneof_descriptor_proto(self, _: OneofDescriptorContext[object]) -> None:
         pass
 
-    def visit_field_descriptor_proto(self, _: FieldDescriptorContext) -> None:
+    def visit_field_descriptor_proto(self, _: FieldDescriptorContext[object]) -> None:
         pass
 
-    def visit_service_descriptor_proto(self, _: ServiceDescriptorContext) -> None:
+    def visit_service_descriptor_proto(self, _: ServiceDescriptorContext[object]) -> None:
         pass
 
-    def visit_method_descriptor_proto(self, _: MethodDescriptorContext) -> None:
+    def visit_method_descriptor_proto(self, _: MethodDescriptorContext[object]) -> None:
         pass
 
-    def __register_file(self, context: FileDescriptorContext) -> None:
+    def __register_file(self, context: FileDescriptorContext[object]) -> None:
         self.__files[context.item.name] = context.file
 
-    def __register_enum(self, context: EnumDescriptorContext) -> None:
+    def __register_enum(self, context: EnumDescriptorContext[object]) -> None:
         qualname, module, ns = self.__build_type(context.root_context, context)
         info = self.__infos[qualname] = EnumInfo(module, ns)
 
         self._log.info("registered", qualname=qualname, info=info)
 
-    def __register_message(self, context: FileDescriptorContext | DescriptorContext) -> None:
+    def __register_message(self, context: FileDescriptorContext[object] | DescriptorContext[object]) -> None:
         qualname, module, ns = self.__build_type(
             root=context.root_context if isinstance(context, DescriptorContext) else context,
             context=context,
@@ -123,7 +123,7 @@ class ContextBuilder(ProtoVisitor, LoggerMixin):
 
     def __register_map_entry(
         self,
-        context: DescriptorContext,
+        context: DescriptorContext[object],
         key: FieldDescriptorProto,
         value: FieldDescriptorProto,
     ) -> None:
@@ -134,8 +134,8 @@ class ContextBuilder(ProtoVisitor, LoggerMixin):
 
     def __build_type(
         self,
-        root: FileDescriptorContext,
-        context: BaseContext[Proto],
+        root: FileDescriptorContext[object],
+        context: BaseContext[object, Proto],
     ) -> t.Tuple[str, ModuleInfo, t.Sequence[str]]:
         ns = [desc.name for desc in context.parts[1:]]
         proto_path = ".".join(ns)

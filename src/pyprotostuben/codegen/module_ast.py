@@ -12,7 +12,10 @@ from pyprotostuben.protobuf.visitor.walker import Walker
 
 class ModuleASTProtoVisitorDecoratorFactory(metaclass=abc.ABCMeta):
     @abc.abstractmethod
-    def create_proto_visitor_decorator(self, modules: t.MutableMapping[Path, ast.Module]) -> ProtoVisitorDecorator:
+    def create_proto_visitor_decorator(
+        self,
+        modules: t.MutableMapping[Path, ast.Module],
+    ) -> ProtoVisitorDecorator[object]:
         raise NotImplementedError
 
 
