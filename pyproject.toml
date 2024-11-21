@@ -14,7 +14,6 @@ classifiers = [
 
 [tool.poetry.scripts]
 protoc-gen-pyprotostuben = "pyprotostuben.protoc:gen_mypy_stub"
-protoc-gen-protomq = "pyprotostuben.protoc:gen_protomq"
 protoc-gen-echo = "pyprotostuben.protoc:echo"
 
 [tool.poetry.dependencies]
@@ -84,5 +83,6 @@ exclude_lines = [
     "pragma: no cover",
     "@abc.abstractmethod",
     "if __name__ == .__main__.:",
+    "if t.TYPE_CHECKING:",
 ]
 show_missing = true
