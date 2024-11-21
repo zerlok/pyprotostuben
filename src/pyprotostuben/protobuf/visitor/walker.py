@@ -1,5 +1,4 @@
 import typing as t
-from dataclasses import replace
 
 from google.protobuf.descriptor_pb2 import (
     DescriptorProto,
@@ -23,175 +22,143 @@ from pyprotostuben.protobuf.visitor.model import (
     ServiceDescriptorContext,
 )
 
-T = t.TypeVar("T")
+T_contra = t.TypeVar("T_contra", contravariant=True)
 
 
-class Walker(ProtoVisitor[T], LoggerMixin):
-    def __init__(self, *nested: ProtoVisitorDecorator[T]) -> None:
+class Walker(ProtoVisitor[T_contra], LoggerMixin):
+    def __init__(self, *nested: ProtoVisitorDecorator[T_contra]) -> None:
         self.__nested = nested
 
-    def visit_file_descriptor_proto(self, context: FileDescriptorContext[T]) -> T:
+    def visit_file_descriptor_proto(self, context: FileDescriptorContext[T_contra]) -> None:
         proto = context.item
 
         log = self._log.bind_details(proto_name=proto.name)
         log.debug("entered")
 
-        meta = context.meta
-
         for nested in self.__nested:
-            meta = nested.enter_file_descriptor_proto(replace(context, meta=meta))
+            nested.enter_file_descriptor_proto(context)
 
-        meta = self.__walk_enums(replace(context, meta=meta))
-        meta = self.__walk_message_types(replace(context, meta=meta))
-        meta = self.__walk_services(replace(context, meta=meta))
-        meta = self.__walk_extensions(replace(context, meta=meta))
+        self.__walk_enums(context)
+        self.__walk_message_types(context)
+        self.__walk_services(context)
+        self.__walk_extensions(context)
 
         for nested in reversed(self.__nested):
-            meta = nested.leave_file_descriptor_proto(replace(context, meta=meta))
+            nested.leave_file_descriptor_proto(context)
 
         log.info("visited")
 
-        return meta
-
-    def visit_enum_descriptor_proto(self, context: EnumDescriptorContext[T]) -> T:
+    def visit_enum_descriptor_proto(self, context: EnumDescriptorContext[T_contra]) -> None:
         proto = context.item
 
         log = self._log.bind_details(proto_name=proto.name)
         log.debug("entered")
 
-        meta = context.meta
-
         for nested in self.__nested:
-            meta = nested.enter_enum_descriptor_proto(replace(context, meta=meta))
+            nested.enter_enum_descriptor_proto(context)
 
-        meta = self.__walk_enum_values(replace(context, meta=meta))
+        self.__walk_enum_values(context)
 
         for nested in reversed(self.__nested):
-            meta = nested.leave_enum_descriptor_proto(replace(context, meta=meta))
+            nested.leave_enum_descriptor_proto(context)
 
         log.info("visited")
 
-        return meta
-
-    def visit_enum_value_descriptor_proto(self, context: EnumValueDescriptorContext[T]) -> T:
+    def visit_enum_value_descriptor_proto(self, context: EnumValueDescriptorContext[T_contra]) -> None:
         proto = context.item
 
         log = self._log.bind_details(proto_name=proto.name)
         log.debug("entered")
 
-        meta = context.meta
-
         for nested in self.__nested:
-            meta = nested.enter_enum_value_descriptor_proto(replace(context, meta=meta))
+            nested.enter_enum_value_descriptor_proto(context)
 
         for nested in reversed(self.__nested):
-            meta = nested.leave_enum_value_descriptor_proto(replace(context, meta=meta))
+            nested.leave_enum_value_descriptor_proto(context)
 
         log.info("visited")
 
-        return meta
-
-    def visit_descriptor_proto(self, context: DescriptorContext[T]) -> T:
+    def visit_descriptor_proto(self, context: DescriptorContext[T_contra]) -> None:
         proto = context.item
 
         log = self._log.bind_details(proto_name=proto.name)
         log.debug("entered")
 
-        meta = context.meta
-
         for nested in self.__nested:
-            meta = nested.enter_descriptor_proto(replace(context, meta=meta))
+            nested.enter_descriptor_proto(context)
 
-        meta = self.__walk_enums(replace(context, meta=meta))
-        meta = self.__walk_nested_types(replace(context, meta=meta))
-        meta = self.__walk_oneofs(replace(context, meta=meta))
-        meta = self.__walk_fields(replace(context, meta=meta))
-        meta = self.__walk_extensions(replace(context, meta=meta))
+        self.__walk_enums(context)
+        self.__walk_nested_types(context)
+        self.__walk_oneofs(context)
+        self.__walk_fields(context)
+        self.__walk_extensions(context)
 
         for nested in reversed(self.__nested):
-            meta = nested.leave_descriptor_proto(replace(context, meta=meta))
+            nested.leave_descriptor_proto(context)
 
         log.info("visited")
 
-        return meta
-
-    def visit_oneof_descriptor_proto(self, context: OneofDescriptorContext[T]) -> T:
+    def visit_oneof_descriptor_proto(self, context: OneofDescriptorContext[T_contra]) -> None:
         proto = context.item
 
         log = self._log.bind_details(proto_name=proto.name)
         log.debug("entered")
 
-        meta = context.meta
-
         for nested in self.__nested:
-            meta = nested.enter_oneof_descriptor_proto(replace(context, meta=meta))
+            nested.enter_oneof_descriptor_proto(context)
 
         for nested in reversed(self.__nested):
-            meta = nested.leave_oneof_descriptor_proto(replace(context, meta=meta))
+            nested.leave_oneof_descriptor_proto(context)
 
         log.info("visited")
 
-        return meta
-
-    def visit_field_descriptor_proto(self, context: FieldDescriptorContext[T]) -> T:
+    def visit_field_descriptor_proto(self, context: FieldDescriptorContext[T_contra]) -> None:
         proto = context.item
 
         log = self._log.bind_details(proto_name=proto.name)
         log.debug("entered")
 
-        meta = context.meta
-
         for nested in self.__nested:
-            meta = nested.enter_field_descriptor_proto(replace(context, meta=meta))
+            nested.enter_field_descriptor_proto(context)
 
         for nested in reversed(self.__nested):
-            meta = nested.leave_field_descriptor_proto(replace(context, meta=meta))
+            nested.leave_field_descriptor_proto(context)
 
         log.info("visited")
 
-        return meta
-
-    def visit_service_descriptor_proto(self, context: ServiceDescriptorContext[T]) -> T:
+    def visit_service_descriptor_proto(self, context: ServiceDescriptorContext[T_contra]) -> None:
         proto = context.item
 
         log = self._log.bind_details(proto_name=proto.name)
         log.debug("entered")
 
-        meta = context.meta
-
         for nested in self.__nested:
-            meta = nested.enter_service_descriptor_proto(replace(context, meta=meta))
+            nested.enter_service_descriptor_proto(context)
 
-        meta = self.__walk_methods(replace(context, meta=meta))
+        self.__walk_methods(context)
 
         for nested in reversed(self.__nested):
-            meta = nested.leave_service_descriptor_proto(replace(context, meta=meta))
+            nested.leave_service_descriptor_proto(context)
 
         log.info("visited")
 
-        return meta
-
-    def visit_method_descriptor_proto(self, context: MethodDescriptorContext[T]) -> T:
+    def visit_method_descriptor_proto(self, context: MethodDescriptorContext[T_contra]) -> None:
         proto = context.item
 
         log = self._log.bind_details(proto_name=proto.name)
         log.debug("entered")
 
-        meta = context.meta
-
         for nested in self.__nested:
-            meta = nested.enter_method_descriptor_proto(replace(context, meta=meta))
+            nested.enter_method_descriptor_proto(context)
 
         for nested in reversed(self.__nested):
-            meta = nested.leave_method_descriptor_proto(replace(context, meta=meta))
+            nested.leave_method_descriptor_proto(context)
 
         log.info("visited")
 
-        return meta
-
-    def walk(self, meta: T, *files: FileDescriptorProto) -> T:
+    def walk(self, meta: T_contra, *files: FileDescriptorProto) -> None:
         for file in files:
-            meta = self.visit_file_descriptor_proto(
+            self.visit_file_descriptor_proto(
                 FileDescriptorContext(
                     meta=meta,
                     item=file,
@@ -199,139 +166,101 @@ class Walker(ProtoVisitor[T], LoggerMixin):
                 )
             )
 
-        return meta
-
-    def __walk_enums(self, context: BaseContext[T, FileDescriptorProto | DescriptorProto]) -> T:
-        meta = context.meta
-
+    def __walk_enums(self, context: BaseContext[T_contra, FileDescriptorProto | DescriptorProto]) -> None:
         for i, enum_type in enumerate(context.item.enum_type):
-            meta = self.visit_enum_descriptor_proto(
+            self.visit_enum_descriptor_proto(
                 EnumDescriptorContext(
-                    meta=meta,
+                    meta=context.meta,
                     parent_context=context,
                     item=enum_type,
                     path=(*context.path, context.item.ENUM_TYPE_FIELD_NUMBER, i),
                 )
             )
 
-        return meta
-
-    def __walk_enum_values(self, context: BaseContext[T, EnumDescriptorProto]) -> T:
-        meta = context.meta
-
+    def __walk_enum_values(self, context: BaseContext[T_contra, EnumDescriptorProto]) -> None:
         for i, value in enumerate(context.item.value):
-            meta = self.visit_enum_value_descriptor_proto(
+            self.visit_enum_value_descriptor_proto(
                 EnumValueDescriptorContext(
-                    meta=meta,
+                    meta=context.meta,
                     parent_context=context,
                     item=value,
                     path=(*context.path, context.item.VALUE_FIELD_NUMBER, i),
                 )
             )
 
-        return meta
-
-    def __walk_message_types(self, context: BaseContext[T, FileDescriptorProto]) -> T:
-        meta = context.meta
-
+    def __walk_message_types(self, context: BaseContext[T_contra, FileDescriptorProto]) -> None:
         for i, message_type in enumerate(context.item.message_type):
-            meta = self.visit_descriptor_proto(
+            self.visit_descriptor_proto(
                 DescriptorContext(
-                    meta=meta,
+                    meta=context.meta,
                     parent_context=context,
                     item=message_type,
                     path=(*context.path, context.item.MESSAGE_TYPE_FIELD_NUMBER, i),
                 )
             )
 
-        return meta
-
-    def __walk_nested_types(self, context: BaseContext[T, DescriptorProto]) -> T:
-        meta = context.meta
-
+    def __walk_nested_types(self, context: BaseContext[T_contra, DescriptorProto]) -> None:
         for i, nested_type in enumerate(context.item.nested_type):
-            meta = self.visit_descriptor_proto(
+            self.visit_descriptor_proto(
                 DescriptorContext(
-                    meta=meta,
+                    meta=context.meta,
                     parent_context=context,
                     item=nested_type,
                     path=(*context.path, context.item.NESTED_TYPE_FIELD_NUMBER, i),
                 )
             )
 
-        return meta
-
-    def __walk_oneofs(self, context: BaseContext[T, DescriptorProto]) -> T:
-        meta = context.meta
-
+    def __walk_oneofs(self, context: BaseContext[T_contra, DescriptorProto]) -> None:
         for i, oneof in enumerate(context.item.oneof_decl):
-            meta = self.visit_oneof_descriptor_proto(
+            self.visit_oneof_descriptor_proto(
                 OneofDescriptorContext(
-                    meta=meta,
+                    meta=context.meta,
                     parent_context=context,
                     item=oneof,
                     path=(*context.path, context.item.ONEOF_DECL_FIELD_NUMBER, i),
                 )
             )
 
-        return meta
-
-    def __walk_fields(self, context: BaseContext[T, DescriptorProto]) -> T:
-        meta = context.meta
-
+    def __walk_fields(self, context: BaseContext[T_contra, DescriptorProto]) -> None:
         for i, field in enumerate(context.item.field):
-            meta = self.visit_field_descriptor_proto(
+            self.visit_field_descriptor_proto(
                 FieldDescriptorContext(
-                    meta=meta,
+                    meta=context.meta,
                     parent_context=context,
                     item=field,
                     path=(*context.path, context.item.FIELD_FIELD_NUMBER, i),
                 )
             )
 
-        return meta
-
-    def __walk_services(self, context: BaseContext[T, FileDescriptorProto]) -> T:
-        meta = context.meta
-
+    def __walk_services(self, context: BaseContext[T_contra, FileDescriptorProto]) -> None:
         for i, service in enumerate(context.item.service):
-            meta = self.visit_service_descriptor_proto(
+            self.visit_service_descriptor_proto(
                 ServiceDescriptorContext(
-                    meta=meta,
+                    meta=context.meta,
                     parent_context=context,
                     item=service,
                     path=(*context.path, context.item.SERVICE_FIELD_NUMBER, i),
                 )
             )
 
-        return meta
-
-    def __walk_methods(self, context: BaseContext[T, ServiceDescriptorProto]) -> T:
-        meta = context.meta
-
+    def __walk_methods(self, context: BaseContext[T_contra, ServiceDescriptorProto]) -> None:
         for i, method in enumerate(context.item.method):
-            meta = self.visit_method_descriptor_proto(
+            self.visit_method_descriptor_proto(
                 MethodDescriptorContext(
-                    meta=meta,
+                    meta=context.meta,
                     parent_context=context,
                     item=method,
                     path=(*context.path, context.item.METHOD_FIELD_NUMBER, i),
                 )
             )
 
-        return meta
-
-    def __walk_extensions(self, context: BaseContext[T, FileDescriptorProto | DescriptorProto]) -> T:
-        meta = context.meta
-
+    def __walk_extensions(self, context: BaseContext[T_contra, FileDescriptorProto | DescriptorProto]) -> None:
         for i, ext in enumerate(context.item.extension):
-            meta = self.visit_field_descriptor_proto(
+            self.visit_field_descriptor_proto(
                 FieldDescriptorContext(
-                    meta=meta,
+                    meta=context.meta,
                     parent_context=context,
                     item=ext,
                     path=(*context.path, context.item.EXTENSION_FIELD_NUMBER, i),
                 )
             )
-
-        return meta

@@ -1,5 +1,5 @@
 import typing as t
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 from google.protobuf.descriptor_pb2 import SourceCodeInfo
 
@@ -41,37 +41,33 @@ class MypyStubASTGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
         self.__message_context_factory = message_context_factory
         self.__grpc_context_factory = grpc_context_factory
 
-    def enter_file_descriptor_proto(self, context: FileDescriptorContext[MypyStubContext]) -> MypyStubContext:
+    def enter_file_descriptor_proto(self, context: FileDescriptorContext[MypyStubContext]) -> None:
         context.meta.messages.put(self.__message_context_factory(context.file))
         context.meta.grpcs.put(self.__grpc_context_factory(context.file))
 
-        return context.meta
-
-    def leave_file_descriptor_proto(self, context: FileDescriptorContext[MypyStubContext]) -> MypyStubContext:
+    def leave_file_descriptor_proto(self, context: FileDescriptorContext[MypyStubContext]) -> None:
         message = context.meta.messages.pop()
         grpc = context.meta.grpcs.pop()
 
-        modules = {
-            message.module.stub_file: message.builder.build_protobuf_message_module(
-                deps=message.external_modules,
-                body=message.nested,
-            ),
-            grpc.module.stub_file: grpc.builder.build_grpc_module(
-                deps=grpc.external_modules,
-                body=grpc.nested,
-            ),
-        }
+        context.meta.modules.update(
+            {
+                message.module.stub_file: message.builder.build_protobuf_message_module(
+                    deps=message.external_modules,
+                    body=message.nested,
+                ),
+                grpc.module.stub_file: grpc.builder.build_grpc_module(
+                    deps=grpc.external_modules,
+                    body=grpc.nested,
+                ),
+            }
+        )
 
-        return replace(context.meta, modules={**context.meta.modules, **modules})
-
-    def enter_enum_descriptor_proto(self, context: EnumDescriptorContext[MypyStubContext]) -> MypyStubContext:
+    def enter_enum_descriptor_proto(self, context: EnumDescriptorContext[MypyStubContext]) -> None:
         parent = context.meta.messages.get_last()
 
         context.meta.messages.put(parent.sub())
 
-        return context.meta
-
-    def leave_enum_descriptor_proto(self, context: EnumDescriptorContext[MypyStubContext]) -> MypyStubContext:
+    def leave_enum_descriptor_proto(self, context: EnumDescriptorContext[MypyStubContext]) -> None:
         message = context.meta.messages.pop()
         parent = context.meta.messages.get_last()
         builder = message.builder
@@ -84,17 +80,10 @@ class MypyStubASTGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
             )
         )
 
-        return context.meta
+    def enter_enum_value_descriptor_proto(self, _: EnumValueDescriptorContext[MypyStubContext]) -> None:
+        pass
 
-    def enter_enum_value_descriptor_proto(
-        self,
-        context: EnumValueDescriptorContext[MypyStubContext],
-    ) -> MypyStubContext:
-        return context.meta
-
-    def leave_enum_value_descriptor_proto(
-        self, context: EnumValueDescriptorContext[MypyStubContext]
-    ) -> MypyStubContext:
+    def leave_enum_value_descriptor_proto(self, context: EnumValueDescriptorContext[MypyStubContext]) -> None:
         parent = context.meta.messages.get_last()
         builder = parent.builder
 
@@ -106,20 +95,16 @@ class MypyStubASTGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
             )
         )
 
-        return context.meta
-
-    def enter_descriptor_proto(self, context: DescriptorContext[MypyStubContext]) -> MypyStubContext:
+    def enter_descriptor_proto(self, context: DescriptorContext[MypyStubContext]) -> None:
         parent = context.meta.messages.get_last()
 
         context.meta.messages.put(parent.sub())
 
-        return context.meta
-
-    def leave_descriptor_proto(self, context: DescriptorContext[MypyStubContext]) -> MypyStubContext:
+    def leave_descriptor_proto(self, context: DescriptorContext[MypyStubContext]) -> None:
         message = context.meta.messages.pop()
 
         if context.item.options.map_entry:
-            return context.meta
+            return
 
         parent = context.meta.messages.get_last()
         builder = message.builder
@@ -133,21 +118,17 @@ class MypyStubASTGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
             ),
         )
 
-        return context.meta
+    def enter_oneof_descriptor_proto(self, _: OneofDescriptorContext[MypyStubContext]) -> None:
+        pass
 
-    def enter_oneof_descriptor_proto(self, context: OneofDescriptorContext[MypyStubContext]) -> MypyStubContext:
-        return context.meta
-
-    def leave_oneof_descriptor_proto(self, context: OneofDescriptorContext[MypyStubContext]) -> MypyStubContext:
+    def leave_oneof_descriptor_proto(self, context: OneofDescriptorContext[MypyStubContext]) -> None:
         info = context.meta.messages.get_last()
         info.oneof_groups.append(context.item.name)
 
-        return context.meta
+    def enter_field_descriptor_proto(self, _: FieldDescriptorContext[MypyStubContext]) -> None:
+        pass
 
-    def enter_field_descriptor_proto(self, context: FieldDescriptorContext[MypyStubContext]) -> MypyStubContext:
-        return context.meta
-
-    def leave_field_descriptor_proto(self, context: FieldDescriptorContext[MypyStubContext]) -> MypyStubContext:
+    def leave_field_descriptor_proto(self, context: FieldDescriptorContext[MypyStubContext]) -> None:
         is_optional = context.item.proto3_optional
         message = context.meta.messages.get_last()
         builder = message.builder
@@ -172,16 +153,12 @@ class MypyStubASTGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
             ),
         )
 
-        return context.meta
-
-    def enter_service_descriptor_proto(self, context: ServiceDescriptorContext[MypyStubContext]) -> MypyStubContext:
+    def enter_service_descriptor_proto(self, context: ServiceDescriptorContext[MypyStubContext]) -> None:
         parent = context.meta.grpcs.get_last()
 
         context.meta.grpcs.put(parent.sub())
 
-        return context.meta
-
-    def leave_service_descriptor_proto(self, context: ServiceDescriptorContext[MypyStubContext]) -> MypyStubContext:
+    def leave_service_descriptor_proto(self, context: ServiceDescriptorContext[MypyStubContext]) -> None:
         grpc = context.meta.grpcs.pop()
         parent = context.meta.grpcs.get_last()
         builder = grpc.builder
@@ -190,12 +167,10 @@ class MypyStubASTGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
         parent.nested.extend(builder.build_grpc_servicer_defs(f"{context.item.name}Servicer", doc, grpc.methods))
         parent.nested.extend(builder.build_grpc_stub_defs(f"{context.item.name}Stub", doc, grpc.methods))
 
-        return context.meta
+    def enter_method_descriptor_proto(self, context: MethodDescriptorContext[MypyStubContext]) -> None:
+        pass
 
-    def enter_method_descriptor_proto(self, context: MethodDescriptorContext[MypyStubContext]) -> MypyStubContext:
-        return context.meta
-
-    def leave_method_descriptor_proto(self, context: MethodDescriptorContext[MypyStubContext]) -> MypyStubContext:
+    def leave_method_descriptor_proto(self, context: MethodDescriptorContext[MypyStubContext]) -> None:
         grpc = context.meta.grpcs.get_last()
         builder = grpc.builder
 
@@ -213,8 +188,6 @@ class MypyStubASTGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
                 server_streaming=context.item.server_streaming,
             ),
         )
-
-        return context.meta
 
     def __get_doc(self, location: t.Optional[SourceCodeInfo.Location]) -> t.Optional[str]:
         if location is None:
