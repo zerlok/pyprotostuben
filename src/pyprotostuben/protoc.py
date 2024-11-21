@@ -9,6 +9,13 @@ def gen_mypy_stub() -> None:
     run_codegen(MypyStubProtocPlugin())
 
 
+def gen_brokrpc() -> None:
+    from pyprotostuben.codegen.brokrpc.plugin import BrokRPCProtocPlugin
+
+    Logger.configure()
+    run_codegen(BrokRPCProtocPlugin())
+
+
 def echo() -> None:
     from pyprotostuben.codegen.echo import RequestEchoProtocPlugin
 

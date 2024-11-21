@@ -13,7 +13,8 @@ classifiers = [
 ]
 
 [tool.poetry.scripts]
-protoc-gen-pyprotostuben = "pyprotostuben.protoc:gen_mypy_stub"
+protoc-gen-mypy-stub = "pyprotostuben.protoc:gen_mypy_stub"
+protoc-gen-brokrpc = "pyprotostuben.protoc:gen_brokrpc"
 protoc-gen-echo = "pyprotostuben.protoc:echo"
 
 [tool.poetry.dependencies]
@@ -27,6 +28,8 @@ pytest = "^8.3.3"
 pytest-cov = "^6.0.0"
 ruff = "^0.7.4"
 grpc-stubs = "^1.53.0.5"
+# TODO: specify pypi package version
+brokrpc = { path = "../brokrpc", extras = ["aiormq"], develop = true, python = "^3.12" }
 
 
 [build-system]
@@ -38,6 +41,7 @@ include = ["src/**/*.py", "tests/**/*.py"]
 extend-exclude = ["tests/**/expected_gen/**.py"]
 force-exclude = true
 line-length = 120
+output-format = "pylint"
 
 [tool.ruff.lint]
 select = ["ALL"]

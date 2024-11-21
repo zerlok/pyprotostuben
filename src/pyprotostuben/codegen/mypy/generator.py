@@ -24,7 +24,7 @@ from pyprotostuben.protobuf.visitor.model import (
 from pyprotostuben.stack import MutableStack
 
 
-@dataclass(frozen=True)
+@dataclass()
 class MypyStubContext(ModuleASTContext):
     messages: MutableStack[MessageContext]
     grpcs: MutableStack[GRPCContext]

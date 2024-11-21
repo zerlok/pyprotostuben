@@ -11,7 +11,7 @@ from pyprotostuben.protobuf.visitor.decorator import ProtoVisitorDecorator
 from pyprotostuben.protobuf.visitor.walker import Walker
 
 
-@dataclass(frozen=True)
+@dataclass()
 class ModuleASTContext:
     file: ProtoFile
     modules: t.MutableMapping[Path, ast.Module]
