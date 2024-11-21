@@ -47,11 +47,11 @@ class MypyStubProtocPlugin(ProtocPlugin, LoggerMixin):
 
     def __create_generator(self, context: CodeGeneratorContext) -> ProtoFileGenerator:
         return ModuleASTBasedProtoFileGenerator(
-            context_factory=self.__create_visitor_context,
+            context_factory=_MultiProcessFuncs.create_visitor_context,
             visitor=MypyStubASTGenerator(
                 registry=context.registry,
-                message_context_factory=partial(self.__create_file_message_context, context.params),
-                grpc_context_factory=partial(self.__create_file_grpc_context, context.params),
+                message_context_factory=partial(_MultiProcessFuncs.create_file_message_context, context.params),
+                grpc_context_factory=partial(_MultiProcessFuncs.create_file_grpc_context, context.params),
             ),
         )
 
@@ -71,7 +71,16 @@ class MypyStubProtocPlugin(ProtocPlugin, LoggerMixin):
             content=item.content,
         )
 
-    def __create_visitor_context(self, file: ProtoFile) -> MypyStubContext:
+
+class _MultiProcessFuncs:
+    """
+    A set of picklable functions that can be passed to `MultiProcessPool`.
+
+    For more info: https://docs.python.org/3/library/multiprocessing.html#programming-guidelines
+    """
+
+    @staticmethod
+    def create_visitor_context(file: ProtoFile) -> MypyStubContext:
         return MypyStubContext(
             file=file,
             modules={},
@@ -79,7 +88,8 @@ class MypyStubProtocPlugin(ProtocPlugin, LoggerMixin):
             grpcs=MutableStack(),
         )
 
-    def __create_file_message_context(self, params: CodeGeneratorParameters, file: ProtoFile) -> MessageContext:
+    @staticmethod
+    def create_file_message_context(params: CodeGeneratorParameters, file: ProtoFile) -> MessageContext:
         deps: t.Set[ModuleInfo] = set()
         module = file.pb2_message
 
@@ -94,7 +104,8 @@ class MypyStubProtocPlugin(ProtocPlugin, LoggerMixin):
             ),
         )
 
-    def __create_file_grpc_context(self, params: CodeGeneratorParameters, file: ProtoFile) -> GRPCContext:
+    @staticmethod
+    def create_file_grpc_context(params: CodeGeneratorParameters, file: ProtoFile) -> GRPCContext:
         deps: t.Set[ModuleInfo] = set()
         module = file.pb2_grpc
 

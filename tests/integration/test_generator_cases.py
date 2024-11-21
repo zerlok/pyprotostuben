@@ -2,7 +2,7 @@ import typing as t
 
 from google.protobuf.compiler.plugin_pb2 import CodeGeneratorResponse
 
-from tests.integration.case import Case
+from tests.integration.cases.case import Case
 
 
 def test_file_content_matches(case: Case) -> None:

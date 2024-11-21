@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from _pytest.fixtures import SubRequest
 
-from tests.integration.case import Case, CaseProvider
+from tests.integration.cases.case import Case, CaseProvider
 
 
 @pytest.fixture(

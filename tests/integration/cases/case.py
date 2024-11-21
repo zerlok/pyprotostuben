@@ -31,6 +31,7 @@ class DirCaseProvider(CaseProvider):
         self,
         filename: str,
         plugin: ProtocPlugin,
+        parameter: t.Optional[str] = None,
         proto_source: t.Optional[str] = None,
         proto_paths: t.Optional[t.Sequence[str]] = None,
         expected_gen_source: t.Optional[str] = None,
@@ -38,6 +39,7 @@ class DirCaseProvider(CaseProvider):
     ) -> None:
         self.__case_dir = Path(filename).parent
         self.__plugin = plugin
+        self.__parameter = parameter
 
         self.__proto_source = self.__case_dir / (proto_source or "proto")
         self.__expected_gen_source = self.__case_dir / (expected_gen_source or "expected_gen")
@@ -57,12 +59,14 @@ class DirCaseProvider(CaseProvider):
         )
 
     def provide(self, tmp_path: Path) -> Case:
-        gen_request = read_request(self.__proto_source, self.__proto_paths, tmp_path)
-        gen_request.parameter = "no-parallel"  # for easier debug
+        request = read_request(self.__proto_source, self.__proto_paths, tmp_path)
+
+        if self.__parameter is not None:
+            request.parameter = self.__parameter
 
         return Case(
             generator=self.__plugin,
-            request=gen_request,
+            request=request,
             gen_expected_files=[
                 load_codegen_response_file_content(self.__expected_gen_source, path)
                 for path in self.__expected_gen_paths
