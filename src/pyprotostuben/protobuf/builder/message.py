@@ -14,6 +14,7 @@ from pyprotostuben.python.info import ModuleInfo, PackageInfo, TypeInfo
 class FieldInfo:
     name: str
     annotation: ast.expr
+    doc: t.Optional[str]
     optional: bool
     default: t.Optional[ast.expr]
     oneof_group: t.Optional[str]
@@ -49,18 +50,28 @@ class MessageASTBuilder:
     def protobuf_map_entry_ref(self) -> TypeInfo:
         return TypeInfo.build(self.inner.typing_module, "MutableMapping" if self.__mutable else "Mapping")
 
-    def build_protobuf_message_module(self, deps: t.Collection[ModuleInfo], body: t.Sequence[ast.stmt]) -> ast.Module:
-        return self.inner.build_module(deps, body) if body else self.inner.build_module([], [])
+    def build_protobuf_message_module(
+        self,
+        doc: t.Optional[str] = None,
+        deps: t.Optional[t.Collection[ModuleInfo]] = None,
+        body: t.Optional[t.Sequence[ast.stmt]] = None,
+    ) -> ast.Module:
+        if not body:
+            return self.inner.build_module(doc=doc)
+
+        return self.inner.build_module(doc, deps, body)
 
     def build_protobuf_message_def(
         self,
         name: str,
-        fields: t.Sequence[FieldInfo],
+        doc: t.Optional[str],
         nested: t.Sequence[ast.stmt],
+        fields: t.Sequence[FieldInfo],
     ) -> ast.stmt:
         return self.inner.build_class_def(
             name=name,
             bases=[self.protobuf_message_ref],
+            doc=doc,
             body=[
                 *nested,
                 self.build_protobuf_message_init_stub(fields),
@@ -82,21 +93,30 @@ class MessageASTBuilder:
     def build_protobuf_enum_def(
         self,
         name: str,
+        doc: t.Optional[str],
         nested: t.Sequence[ast.stmt],
     ) -> ast.ClassDef:
         return self.inner.build_class_def(
             name=name,
             bases=[self.protobuf_enum_ref],
+            doc=doc,
             body=nested,
         )
 
-    def build_protobuf_enum_value_def(self, name: str, value: object) -> ast.stmt:
-        return ast.Assign(
-            targets=[ast.Name(id=name)],
-            value=ast.Constant(value=value),
-            # Seems like it is allowed to pass `None`, but ast typing says it isn't
-            lineno=t.cast(int, None),
-        )
+    def build_protobuf_enum_value_def(self, name: str, doc: t.Optional[str], value: object) -> t.Sequence[ast.stmt]:
+        result: t.List[ast.stmt] = [
+            ast.Assign(
+                targets=[ast.Name(id=name)],
+                value=ast.Constant(value=value),
+                # Seems like it is allowed to pass `None`, but ast typing says it isn't
+                lineno=t.cast(int, None),
+            )
+        ]
+
+        if doc:
+            result.append(self.inner.build_docstring(doc))
+
+        return result
 
     def build_protobuf_message_init_stub(self, fields: t.Sequence[FieldInfo]) -> ast.stmt:
         return self.inner.build_init_stub(
@@ -120,11 +140,13 @@ class MessageASTBuilder:
         return list(
             chain.from_iterable(
                 (
-                    self.inner.build_property_getter_stub(name=field.name, annotation=field.annotation),
+                    self.inner.build_property_getter_stub(name=field.name, annotation=field.annotation, doc=field.doc),
                     self.inner.build_property_setter_stub(name=field.name, annotation=field.annotation),
                 )
                 if self.__mutable
-                else (self.inner.build_property_getter_stub(name=field.name, annotation=field.annotation),)
+                else (
+                    self.inner.build_property_getter_stub(name=field.name, annotation=field.annotation, doc=field.doc),
+                )
                 for field in fields
             ),
         )

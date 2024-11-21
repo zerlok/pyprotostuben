@@ -1,51 +1,47 @@
-import abc
 import ast
 import typing as t
+from dataclasses import dataclass
 from pathlib import Path
 
 from pyprotostuben.codegen.abc import ProtoFileGenerator
+from pyprotostuben.codegen.model import GeneratedItem
 from pyprotostuben.logging import Logger, LoggerMixin
 from pyprotostuben.protobuf.file import ProtoFile
-from pyprotostuben.protobuf.visitor.abc import visit
 from pyprotostuben.protobuf.visitor.decorator import ProtoVisitorDecorator
-from pyprotostuben.protobuf.visitor.dfs import DFSWalkingProtoVisitor
+from pyprotostuben.protobuf.visitor.walker import Walker
 
 
-class ModuleASTProtoVisitorDecoratorFactory(metaclass=abc.ABCMeta):
-    @abc.abstractmethod
-    def create_proto_visitor_decorator(self, modules: t.MutableMapping[Path, ast.Module]) -> ProtoVisitorDecorator:
-        raise NotImplementedError
+@dataclass(frozen=True)
+class ModuleASTContext:
+    file: ProtoFile
+    modules: t.Mapping[Path, ast.Module]
 
 
-class ModuleASTBasedProtoFileGenerator(ProtoFileGenerator, LoggerMixin):
-    def __init__(self, factory: ModuleASTProtoVisitorDecoratorFactory) -> None:
-        self.__factory = factory
+T = t.TypeVar("T", bound=ModuleASTContext)
 
-    def run(self, file: ProtoFile) -> t.Sequence[t.Tuple[ProtoFile, Path, str]]:
+
+class ModuleASTBasedProtoFileGenerator(t.Generic[T], ProtoFileGenerator, LoggerMixin):
+    def __init__(self, context_factory: t.Callable[[ProtoFile], T], visitor: ProtoVisitorDecorator[T]) -> None:
+        self.__context_factory = context_factory
+        self.__walker = Walker(visitor)
+
+    def run(self, file: ProtoFile) -> t.Sequence[GeneratedItem]:
         log = self._log.bind_details(file_name=file.name)
         log.debug("file received")
 
-        modules: t.Dict[Path, ast.Module] = {}
+        context = self.__walker.walk(self.__context_factory(file), file.descriptor)
+        log.debug("proto visited", context=context)
 
-        generator = self.__factory.create_proto_visitor_decorator(modules)
-        log = log.bind_details(generator=generator)
+        return list(self.__gen_modules(context, log))
 
-        visit(DFSWalkingProtoVisitor(generator), file.descriptor)
-        log.debug("proto visited", modules=modules)
-
-        return list(self.__gen_modules(file, modules, log))
-
-    def __gen_modules(
-        self,
-        file: ProtoFile,
-        modules: t.Mapping[Path, ast.Module],
-        log: Logger,
-    ) -> t.Iterable[t.Tuple[ProtoFile, Path, str]]:
-        for path, module_ast in modules.items():
+    def __gen_modules(self, context: ModuleASTContext, log: Logger) -> t.Iterable[GeneratedItem]:
+        for path, module_ast in context.modules.items():
             if not module_ast.body:
                 continue
 
             module_content = ast.unparse(module_ast)
-            log.info("module generated", path=path)
+            module = GeneratedItem(context.file, path, module_content)
 
-            yield file, path, module_content
+            log.info("module generated", module=module)
+
+            yield module

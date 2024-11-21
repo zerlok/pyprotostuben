@@ -1,75 +1,25 @@
-import json
-import subprocess
-import typing as t
-from dataclasses import dataclass
+import importlib
+import inspect
 from pathlib import Path
 
 import pytest
 from _pytest.fixtures import SubRequest
-from google.protobuf.compiler.plugin_pb2 import CodeGeneratorRequest, CodeGeneratorResponse
 
-from pyprotostuben.codegen.abc import ProtocPlugin
-from pyprotostuben.codegen.mypy.plugin import MypyStubProtocPlugin
-
-CASES_DIR = Path(__file__).parent / "cases"
-CASES = [
-    pytest.param(path, id=str(path.relative_to(CASES_DIR)))
-    for path in sorted(CASES_DIR.iterdir())
-    if path.is_dir() and path.stem != "__pycache__" and (path / "proto").is_dir()
-]
+from tests.integration.case import Case, CaseProvider
 
 
-@dataclass(frozen=True)
-class Case:
-    generator: ProtocPlugin
-    request: CodeGeneratorRequest
-    gen_expected_files: t.Sequence[CodeGeneratorResponse.File]
-
-
-@pytest.fixture(params=CASES)
+@pytest.fixture(
+    params=[
+        pytest.param(obj, id=f"group={path.name}; name={name}")
+        for path in sorted(
+            path
+            for path in (Path(__file__).parent / "cases").iterdir()
+            if path.stem != "__pycache__" and (path / "case.py").is_file()
+        )
+        for name, obj in inspect.getmembers(importlib.import_module(f"tests.integration.cases.{path.name}.case"))
+        if isinstance(obj, CaseProvider)
+    ]
+)
 def case(request: SubRequest, tmp_path: Path) -> Case:
-    case_dir: Path = request.param
-    proto_dir = case_dir / "proto"
-    expected_gen_dir = case_dir / "expected_gen"
-
-    gen_request = _read_request(proto_dir, tmp_path)
-    gen_request.parameter = "no-parallel"  # for easier debug
-
-    return Case(
-        generator=MypyStubProtocPlugin(),
-        request=gen_request,
-        gen_expected_files=[
-            CodeGeneratorResponse.File(
-                name=str(path.relative_to(expected_gen_dir)),
-                content=_load_content(path),
-            )
-            for path in expected_gen_dir.iterdir()
-        ],
-    )
-
-
-def _read_request(proto_dir: Path, tmp_path: Path) -> CodeGeneratorRequest:
-    # NOTE: need to execute `protoc` that can be installed in local virtual env to get protoc plugin request to pass it
-    # to `CodeGeneratorPlugin` in tests.
-    echo_result = subprocess.run(  # noqa: S603
-        [  # noqa: S607
-            "protoc",
-            f"-I{proto_dir}",
-            f"--echo_out={tmp_path}",
-            *(str(proto) for proto in proto_dir.rglob("*.proto")),
-        ],
-        stderr=subprocess.PIPE,
-        encoding="utf-8",
-        check=False,
-    )
-
-    if echo_result.returncode != 0:
-        pytest.fail(echo_result.stderr)
-
-    with (tmp_path / "request.json").open("r") as echo_out:
-        return CodeGeneratorRequest(**json.load(echo_out))
-
-
-def _load_content(path: Path) -> str:
-    with path.open("r") as fd:
-        return fd.read()
+    case_provider: CaseProvider = request.param
+    return case_provider.provide(tmp_path)

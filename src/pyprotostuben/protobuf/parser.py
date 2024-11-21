@@ -8,7 +8,7 @@ class Parameter:
     value: str
 
 
-class Parameters:
+class CodeGeneratorParameters:
     def __init__(self, params: t.Sequence[Parameter]) -> None:
         self.__params = params
         self.__flags = [param.value for param in self.__params if param.name is None]
@@ -47,5 +47,5 @@ class ParameterParser:
 
             yield Parameter(name, value)
 
-    def parse(self, params: str) -> Parameters:
-        return Parameters(list(self.iter_parse(params)))
+    def parse(self, params: str) -> CodeGeneratorParameters:
+        return CodeGeneratorParameters(list(self.iter_parse(params)))

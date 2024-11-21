@@ -2,6 +2,12 @@ syntax = "proto3";
 
 package types;
 
+enum MyEnum {
+  MY_ENUM_VAL_ZERO = 0;
+  MY_ENUM_VAL_ONE = 1;
+  MY_ENUM_VAL_TWO = 2;
+}
+
 message Container {
   bool b1 = 1;
   int32 i32 = 2;
