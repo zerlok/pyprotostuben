@@ -1,22 +1,17 @@
 import io
 import typing as t
-from unittest.mock import create_autospec
 
 import pytest
 from _pytest.fixtures import SubRequest
 from google.protobuf.compiler.plugin_pb2 import CodeGeneratorRequest, CodeGeneratorResponse
 from google.protobuf.descriptor_pb2 import FileDescriptorProto
 
-from pyprotostuben.codegen.abc import ProtocPlugin
 from pyprotostuben.codegen.run import run_codegen
-
-
-class CustomPluginFailure(Exception):
-    pass
+from tests.stub.plugin import CustomPluginError, ProtocPluginStub
 
 
 @pytest.mark.parametrize(
-    ["codegen_request", "codegen_error", "codegen_response"],
+    ("codegen_request", "codegen_error", "codegen_response"),
     [
         pytest.param(
             CodeGeneratorRequest(
@@ -40,14 +35,14 @@ class CustomPluginFailure(Exception):
         ),
         pytest.param(
             CodeGeneratorRequest(),
-            CustomPluginFailure(),
-            CodeGeneratorResponse(error="CustomPluginFailure()"),
+            CustomPluginError(),
+            CodeGeneratorResponse(error="CustomPluginError()"),
         ),
     ],
     indirect=True,
 )
-def test_run_codegen_forwars_plugin_request_and_response_to_streams(
-    plugin: ProtocPlugin,
+def test_run_codegen_forwards_plugin_request_and_response_to_streams(
+    plugin: ProtocPluginStub,
     codegen_request: t.Optional[CodeGeneratorRequest],
     codegen_response: t.Optional[CodeGeneratorResponse],
     codegen_input: t.IO[bytes],
@@ -55,7 +50,7 @@ def test_run_codegen_forwars_plugin_request_and_response_to_streams(
 ) -> None:
     run_codegen(plugin, codegen_input, codegen_output)
 
-    plugin.run.assert_called_once_with(codegen_request)
+    assert plugin.requests == [codegen_request]
     assert read_response(codegen_output) == codegen_response
 
 
@@ -102,13 +97,8 @@ def codegen_output() -> t.Iterator[t.IO[bytes]]:
 
 
 @pytest.fixture
-def plugin(codegen_error: t.Optional[Exception], codegen_response: t.Optional[CodeGeneratorResponse]) -> ProtocPlugin:
-    mock = create_autospec(ProtocPlugin)
-
-    if codegen_error is not None:
-        mock.run.side_effect = codegen_error
-
-    elif codegen_response is not None:
-        mock.run.return_value = codegen_response
-
-    return mock
+def plugin(
+    codegen_error: t.Optional[Exception],
+    codegen_response: t.Optional[CodeGeneratorResponse],
+) -> ProtocPluginStub:
+    return ProtocPluginStub(codegen_error, codegen_response)
