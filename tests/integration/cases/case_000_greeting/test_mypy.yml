@@ -1,0 +1,25 @@
+- case: valid_server_and_client_types
+  env:
+    - MYPYPATH=tests/integration/cases/case_000_greeting/expected_gen/
+
+  main: |-
+    from brokrpc.rpc.client import Client
+    from greeting_brokrpc import GreeterService, create_client
+    
+    reveal_type(GreeterService) # N: Revealed type is "def () -> greeting_brokrpc.GreeterService"
+    
+    s: GreeterService
+    reveal_type(s.greet) # N: Revealed type is "def (request: brokrpc.message.Message[greeting_pb2.GreetRequest]) -> typing.Coroutine[Any, Any, greeting_pb2.GreetResponse]"
+    
+    async def main(client: Client) -> None:
+        async with create_client(client) as greeter_client:
+            reveal_type(greeter_client) # N: Revealed type is "greeting_brokrpc.GreeterClient"
+            reveal_type(greeter_client.greet) # N: Revealed type is "def (request: greeting_pb2.GreetRequest) -> typing.Coroutine[Any, Any, brokrpc.message.Message[greeting_pb2.GreetResponse]]"
+
+  mypy_config: |-
+    [mypy-aiormq.*,pamqp.*]
+    ignore_missing_imports = True
+    ignore_errors = True
+
+  skip: |-
+    sys.version_info[:2] < (3, 12)

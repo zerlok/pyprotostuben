@@ -11,10 +11,10 @@ from pyprotostuben.protobuf.visitor.decorator import ProtoVisitorDecorator
 from pyprotostuben.protobuf.visitor.walker import Walker
 
 
-@dataclass(frozen=True)
+@dataclass()
 class ModuleASTContext:
     file: ProtoFile
-    modules: t.Mapping[Path, ast.Module]
+    modules: t.MutableMapping[Path, ast.Module]
 
 
 T = t.TypeVar("T", bound=ModuleASTContext)
@@ -29,7 +29,8 @@ class ModuleASTBasedProtoFileGenerator(t.Generic[T], ProtoFileGenerator, LoggerM
         log = self._log.bind_details(file_name=file.name)
         log.debug("file received")
 
-        context = self.__walker.walk(self.__context_factory(file), file.descriptor)
+        context = self.__context_factory(file)
+        self.__walker.walk(context, file.descriptor)
         log.debug("proto visited", context=context)
 
         return list(self.__gen_modules(context, log))

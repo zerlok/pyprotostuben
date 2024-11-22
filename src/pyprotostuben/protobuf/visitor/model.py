@@ -89,6 +89,22 @@ class ChildContext(BaseContext[M_co, T_co], t.Generic[M_co, T_co, P_co]):
     def location(self) -> t.Optional[SourceCodeInfo.Location]:
         return self.root_context.locations.get(self.path)
 
+    @property
+    def comments(self) -> t.Sequence[str]:
+        if self.location is None:
+            return []
+
+        blocks: t.List[str] = []
+        blocks.extend(comment.strip() for comment in self.location.leading_detached_comments)
+
+        if self.location.HasField("leading_comments"):
+            blocks.append(self.location.leading_comments.strip())
+
+        if self.location.HasField("trailing_comments"):
+            blocks.append(self.location.trailing_comments.strip())
+
+        return blocks
+
 
 @dataclass(frozen=True)
 class EnumDescriptorContext(ChildContext[M_co, EnumDescriptorProto, t.Union[FileDescriptorProto, DescriptorProto]]):

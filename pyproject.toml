@@ -1,19 +1,27 @@
 [tool.poetry]
 name = "pyprotostuben"
-version = "0.2.1"
+version = "0.3.0"
 description = "Generate Python MyPy stub modules from protobuf files."
 authors = ["zerlok <danil.troshnev@gmail.com>"]
 readme = "README.md"
 license = "MIT"
+keywords = [
+    "python",
+    "codegen",
+    "protobuf",
+    "grpc",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
     "Topic :: Software Development :: Code Generators",
     "Typing :: Typed",
 ]
 
 [tool.poetry.scripts]
-protoc-gen-pyprotostuben = "pyprotostuben.protoc:gen_mypy_stub"
+protoc-gen-mypy-stub = "pyprotostuben.protoc:gen_mypy_stub"
+protoc-gen-brokrpc = "pyprotostuben.protoc:gen_brokrpc"
 protoc-gen-echo = "pyprotostuben.protoc:echo"
 
 [tool.poetry.dependencies]
@@ -25,19 +33,23 @@ types-protobuf = "^5.28.3.20241030"
 mypy = "^1.13.0"
 pytest = "^8.3.3"
 pytest-cov = "^6.0.0"
+pytest-mypy-plugins = "^3.1.2"
 ruff = "^0.7.4"
 grpc-stubs = "^1.53.0.5"
+BrokRPC = { version = "^0.1.0", python = ">=3.12,<4.0" }
 
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
+
 [tool.ruff]
 include = ["src/**/*.py", "tests/**/*.py"]
 extend-exclude = ["tests/**/expected_gen/**.py"]
 force-exclude = true
 line-length = 120
+output-format = "pylint"
 
 [tool.ruff.lint]
 select = ["ALL"]
@@ -53,15 +65,16 @@ ignore = [
     "S101", # allow asserts for tests checks and mypy help
 ]
 
+
 [tool.mypy]
 files = ["src", "tests"]
 strict = true
-
 
 [[tool.mypy.overrides]]
 module = ["tests.integration.cases.*.expected_gen.*"]
 ignore_missing_imports = true
 ignore_errors = true
+
 
 [tool.pytest.ini_options]
 pythonpath = [
