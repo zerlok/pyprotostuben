@@ -166,7 +166,7 @@ class Walker(ProtoVisitor[T_contra], LoggerMixin):
                 )
             )
 
-    def __walk_enums(self, context: BaseContext[T_contra, FileDescriptorProto | DescriptorProto]) -> None:
+    def __walk_enums(self, context: BaseContext[T_contra, t.Union[FileDescriptorProto, DescriptorProto]]) -> None:
         for i, enum_type in enumerate(context.item.enum_type):
             self.visit_enum_descriptor_proto(
                 EnumDescriptorContext(
@@ -254,7 +254,7 @@ class Walker(ProtoVisitor[T_contra], LoggerMixin):
                 )
             )
 
-    def __walk_extensions(self, context: BaseContext[T_contra, FileDescriptorProto | DescriptorProto]) -> None:
+    def __walk_extensions(self, context: BaseContext[T_contra, t.Union[FileDescriptorProto, DescriptorProto]]) -> None:
         for i, ext in enumerate(context.item.extension):
             self.visit_field_descriptor_proto(
                 FieldDescriptorContext(
