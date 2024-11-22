@@ -112,7 +112,7 @@ class ContextBuilder(ProtoVisitor[object], LoggerMixin):
 
         self._log.info("registered", qualname=qualname, info=info)
 
-    def __register_message(self, context: FileDescriptorContext[object] | DescriptorContext[object]) -> None:
+    def __register_message(self, context: t.Union[FileDescriptorContext[object], DescriptorContext[object]]) -> None:
         qualname, module, ns = self.__build_type(
             root=context.root_context if isinstance(context, DescriptorContext) else context,
             context=context,
