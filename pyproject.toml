@@ -5,9 +5,16 @@ description = "Generate Python MyPy stub modules from protobuf files."
 authors = ["zerlok <danil.troshnev@gmail.com>"]
 readme = "README.md"
 license = "MIT"
+keywords = [
+    "python",
+    "codegen",
+    "protobuf",
+    "grpc",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
     "Topic :: Software Development :: Code Generators",
     "Typing :: Typed",
 ]
@@ -26,15 +33,16 @@ types-protobuf = "^5.28.3.20241030"
 mypy = "^1.13.0"
 pytest = "^8.3.3"
 pytest-cov = "^6.0.0"
+pytest-mypy-plugins = "^3.1.2"
 ruff = "^0.7.4"
 grpc-stubs = "^1.53.0.5"
-# TODO: specify pypi package version
-brokrpc = { path = "../brokrpc", extras = ["aiormq"], develop = true, python = "^3.12" }
+BrokRPC = { version = "^0.1.0", python = "^3.12" }
 
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
 
 [tool.ruff]
 include = ["src/**/*.py", "tests/**/*.py"]
@@ -57,15 +65,16 @@ ignore = [
     "S101", # allow asserts for tests checks and mypy help
 ]
 
+
 [tool.mypy]
 files = ["src", "tests"]
 strict = true
-
 
 [[tool.mypy.overrides]]
 module = ["tests.integration.cases.*.expected_gen.*"]
 ignore_missing_imports = true
 ignore_errors = true
+
 
 [tool.pytest.ini_options]
 pythonpath = [
