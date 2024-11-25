@@ -16,7 +16,6 @@ from pyprotostuben.protobuf.registry import (
 from pyprotostuben.protobuf.visitor.abc import ProtoVisitor
 from pyprotostuben.protobuf.visitor.decorator import LeaveProtoVisitorDecorator
 from pyprotostuben.protobuf.visitor.model import (
-    BaseContext,
     DescriptorContext,
     EnumDescriptorContext,
     EnumValueDescriptorContext,
@@ -24,7 +23,6 @@ from pyprotostuben.protobuf.visitor.model import (
     FileDescriptorContext,
     MethodDescriptorContext,
     OneofDescriptorContext,
-    Proto,
     ServiceDescriptorContext,
 )
 from pyprotostuben.protobuf.visitor.walker import Walker
@@ -90,7 +88,7 @@ class ContextBuilder(ProtoVisitor[BuildContext], LoggerMixin):
         context = BuildContext()
 
         # TODO: consider `request.source_file_descriptors` usage to keep options
-        walker.walk(context, *request.proto_file)
+        walker.walk(*request.proto_file, meta=context)
 
         return CodeGeneratorContext(
             request=request,
@@ -134,7 +132,11 @@ class ContextBuilder(ProtoVisitor[BuildContext], LoggerMixin):
     def __build_type(
         self,
         root: FileDescriptorContext[BuildContext],
-        context: BaseContext[BuildContext, Proto],
+        context: t.Union[
+            FileDescriptorContext[BuildContext],
+            EnumDescriptorContext[BuildContext],
+            DescriptorContext[BuildContext],
+        ],
     ) -> t.Tuple[str, ModuleInfo, t.Sequence[str]]:
         ns = [desc.name for desc in context.parts[1:]]
         proto_path = ".".join(ns)

@@ -32,7 +32,7 @@ class ModuleASTBasedProtoFileGenerator(t.Generic[T], ProtoFileGenerator, LoggerM
         log.debug("proto file received")
 
         context = self.__context_factory(file)
-        self.__walker.walk(context, file.descriptor)
+        self.__walker.walk(file.descriptor, meta=context)
         log.debug("proto file visited", context=context)
 
         info = GeneratedCodeInfo(

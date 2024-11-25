@@ -1,3 +1,4 @@
+import abc
 import typing as t
 from dataclasses import dataclass
 from functools import cached_property
@@ -31,11 +32,14 @@ M_co = t.TypeVar("M_co", covariant=True)
 P_co = t.TypeVar("P_co", covariant=True, bound=Proto)
 T_co = t.TypeVar("T_co", covariant=True, bound=Proto)
 
+M = t.TypeVar("M")
+
 
 @dataclass(frozen=True)
-class BaseContext(t.Generic[M_co, T_co]):
+class _BaseContext(t.Generic[M_co, T_co]):
     meta: M_co
     proto: T_co
+    child_meta_factory: "ChildMetaFactory[M_co]"
     path: t.Sequence[int]
 
     @property
@@ -44,7 +48,7 @@ class BaseContext(t.Generic[M_co, T_co]):
 
 
 @dataclass(frozen=True)
-class FileDescriptorContext(BaseContext[M_co, FileDescriptorProto]):
+class FileDescriptorContext(_BaseContext[M_co, FileDescriptorProto]):
     @cached_property
     def file(self) -> ProtoFile:
         return ProtoFile(self.proto)
@@ -55,14 +59,14 @@ class FileDescriptorContext(BaseContext[M_co, FileDescriptorProto]):
 
 
 @dataclass(frozen=True)
-class ChildContext(BaseContext[M_co, T_co], t.Generic[M_co, T_co, P_co]):
-    parent: BaseContext[M_co, P_co]
+class _ChildContext(_BaseContext[M_co, T_co], t.Generic[M_co, T_co, P_co]):
+    parent: _BaseContext[M_co, P_co]
 
     @cached_property
     def root(self) -> FileDescriptorContext[M_co]:
         ctx = self.parent
 
-        while isinstance(ctx, ChildContext):
+        while isinstance(ctx, _ChildContext):
             ctx = ctx.parent
 
         assert isinstance(ctx, FileDescriptorContext)
@@ -83,35 +87,68 @@ class ChildContext(BaseContext[M_co, T_co], t.Generic[M_co, T_co, P_co]):
 
 
 @dataclass(frozen=True)
-class EnumDescriptorContext(ChildContext[M_co, EnumDescriptorProto, t.Union[FileDescriptorProto, DescriptorProto]]):
+class EnumDescriptorContext(_ChildContext[M_co, EnumDescriptorProto, t.Union[FileDescriptorProto, DescriptorProto]]):
     pass
 
 
 @dataclass(frozen=True)
-class EnumValueDescriptorContext(ChildContext[M_co, EnumValueDescriptorProto, EnumDescriptorProto]):
+class EnumValueDescriptorContext(_ChildContext[M_co, EnumValueDescriptorProto, EnumDescriptorProto]):
     pass
 
 
 @dataclass(frozen=True)
-class DescriptorContext(ChildContext[M_co, DescriptorProto, t.Union[FileDescriptorProto, DescriptorProto]]):
+class DescriptorContext(_ChildContext[M_co, DescriptorProto, t.Union[FileDescriptorProto, DescriptorProto]]):
     pass
 
 
 @dataclass(frozen=True)
-class OneofDescriptorContext(ChildContext[M_co, OneofDescriptorProto, DescriptorProto]):
+class OneofDescriptorContext(_ChildContext[M_co, OneofDescriptorProto, DescriptorProto]):
     pass
 
 
 @dataclass(frozen=True)
-class FieldDescriptorContext(ChildContext[M_co, FieldDescriptorProto, t.Union[FileDescriptorProto, DescriptorProto]]):
+class FieldDescriptorContext(_ChildContext[M_co, FieldDescriptorProto, t.Union[FileDescriptorProto, DescriptorProto]]):
     pass
 
 
 @dataclass(frozen=True)
-class ServiceDescriptorContext(ChildContext[M_co, ServiceDescriptorProto, FileDescriptorProto]):
+class ServiceDescriptorContext(_ChildContext[M_co, ServiceDescriptorProto, FileDescriptorProto]):
     pass
 
 
 @dataclass(frozen=True)
-class MethodDescriptorContext(ChildContext[M_co, MethodDescriptorProto, ServiceDescriptorProto]):
+class MethodDescriptorContext(_ChildContext[M_co, MethodDescriptorProto, ServiceDescriptorProto]):
     pass
+
+
+class ChildMetaFactory(t.Protocol[M]):
+    @abc.abstractmethod
+    def __call__(
+        self,
+        parent: t.Union[
+            FileDescriptorContext[M],
+            EnumDescriptorContext[M],
+            EnumValueDescriptorContext[M],
+            DescriptorContext[M],
+            OneofDescriptorContext[M],
+            FieldDescriptorContext[M],
+            ServiceDescriptorContext[M],
+            MethodDescriptorContext[M],
+        ],
+    ) -> M:
+        raise NotImplementedError
+
+
+def forward_meta(
+    parent: t.Union[
+        FileDescriptorContext[M_co],
+        EnumDescriptorContext[M_co],
+        EnumValueDescriptorContext[M_co],
+        DescriptorContext[M_co],
+        OneofDescriptorContext[M_co],
+        FieldDescriptorContext[M_co],
+        ServiceDescriptorContext[M_co],
+        MethodDescriptorContext[M_co],
+    ],
+) -> M_co:
+    return parent.meta
