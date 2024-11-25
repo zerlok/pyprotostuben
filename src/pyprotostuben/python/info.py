@@ -2,6 +2,7 @@ import functools as ft
 import typing as t
 from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,10 @@ class ModuleInfo(NamespaceInfo):
         *other, last = ref.split(".")
         return ModuleInfo(PackageInfo.build_or_none(*other), last)
 
+    @classmethod
+    def from_module(cls, obj: ModuleType) -> "ModuleInfo":
+        return cls.from_str(obj.__name__)
+
     @property
     def package(self) -> t.Optional[PackageInfo]:
         return self.parent
@@ -69,6 +74,15 @@ class ModuleInfo(NamespaceInfo):
 class TypeInfo:
     module: t.Optional[ModuleInfo]
     ns: t.Sequence[str]
+
+    @classmethod
+    def from_str(cls, ref: str) -> "TypeInfo":
+        module, ns = ref.split(":", maxsplit=1)
+        return cls(ModuleInfo.from_str(module), ns.split("."))
+
+    @classmethod
+    def from_type(cls, type_: t.Type[object]) -> "TypeInfo":
+        return cls(ModuleInfo.from_str(type_.__module__), type_.__qualname__.split("."))
 
     @classmethod
     def build(cls, module: t.Optional[ModuleInfo], *ns: str) -> "TypeInfo":
