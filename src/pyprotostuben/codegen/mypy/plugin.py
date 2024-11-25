@@ -1,11 +1,10 @@
 from contextlib import ExitStack
 from functools import partial
+from itertools import chain
 
 from google.protobuf.compiler.plugin_pb2 import CodeGeneratorRequest, CodeGeneratorResponse
-from google.protobuf.descriptor_pb2 import GeneratedCodeInfo
 
 from pyprotostuben.codegen.abc import ProtocPlugin, ProtoFileGenerator
-from pyprotostuben.codegen.model import GeneratedItem
 from pyprotostuben.codegen.module_ast import ModuleASTBasedProtoFileGenerator
 from pyprotostuben.codegen.mypy.context import GRPCContext, MessageContext
 from pyprotostuben.codegen.mypy.generator import MypyStubASTGenerator, MypyStubContext
@@ -34,7 +33,7 @@ class MypyStubProtocPlugin(ProtocPlugin, LoggerMixin):
 
             resp = CodeGeneratorResponse(
                 supported_features=CodeGeneratorResponse.Feature.FEATURE_PROTO3_OPTIONAL,
-                file=(self.__build_file(item) for items in pool.run(gen.run, context.files) for item in items),
+                file=chain.from_iterable(pool.run(gen.run, context.files)),
             )
 
         log.info("request handled")
@@ -52,15 +51,6 @@ class MypyStubProtocPlugin(ProtocPlugin, LoggerMixin):
             SingleProcessPool()
             if params.has_flag("no-parallel") or params.has_flag("debug")
             else cm_stack.enter_context(MultiProcessPool.setup())
-        )
-
-    def __build_file(self, item: GeneratedItem) -> CodeGeneratorResponse.File:
-        return CodeGeneratorResponse.File(
-            name=str(item.path),
-            generated_code_info=GeneratedCodeInfo(
-                annotation=[GeneratedCodeInfo.Annotation(source_file=str(item.source.proto_path))],
-            ),
-            content=item.content,
         )
 
 
