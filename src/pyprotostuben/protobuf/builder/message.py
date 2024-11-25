@@ -53,13 +53,12 @@ class MessageASTBuilder:
     def build_protobuf_message_module(
         self,
         doc: t.Optional[str] = None,
-        deps: t.Optional[t.Collection[ModuleInfo]] = None,
         body: t.Optional[t.Sequence[ast.stmt]] = None,
     ) -> ast.Module:
         if not body:
             return self.inner.build_module(doc=doc)
 
-        return self.inner.build_module(doc, deps, body)
+        return self.inner.build_module(doc, body)
 
     def build_protobuf_message_def(
         self,

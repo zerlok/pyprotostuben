@@ -82,8 +82,8 @@ class GRPCASTBuilder:
     def grpc_stream_stream_call_ref(self) -> TypeInfo:
         return TypeInfo.build(self.__base_grpc_module, "StreamStreamCall")
 
-    def build_grpc_module(self, deps: t.Collection[ModuleInfo], body: t.Sequence[ast.stmt]) -> ast.Module:
-        return self.inner.build_module(deps=deps, body=body) if body else self.inner.build_module()
+    def build_grpc_module(self, body: t.Sequence[ast.stmt]) -> ast.Module:
+        return self.inner.build_module(body=body) if body else self.inner.build_module()
 
     def build_grpc_servicer_defs(
         self,

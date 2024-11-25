@@ -37,9 +37,5 @@ class ProtoFile:
         return PackageInfo.build(*package_parts)
 
     @ft.cached_property
-    def pb2_message(self) -> ModuleInfo:
+    def pb2_module(self) -> ModuleInfo:
         return ModuleInfo(self.pb2_package, f"{self.name}_pb2")
-
-    @ft.cached_property
-    def pb2_grpc(self) -> ModuleInfo:
-        return ModuleInfo(self.pb2_package, f"{self.name}_pb2_grpc")

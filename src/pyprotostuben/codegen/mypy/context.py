@@ -12,7 +12,6 @@ from pyprotostuben.python.info import ModuleInfo
 class MessageContext:
     file: ProtoFile
     module: ModuleInfo
-    external_modules: t.MutableSet[ModuleInfo]
     builder: MessageASTBuilder
     nested: t.MutableSequence[ast.stmt] = field(default_factory=list)
     fields: t.MutableSequence[FieldInfo] = field(default_factory=list)
@@ -22,7 +21,6 @@ class MessageContext:
         return MessageContext(
             file=self.file,
             module=self.module,
-            external_modules=self.external_modules,
             builder=self.builder,
         )
 
@@ -31,7 +29,6 @@ class MessageContext:
 class GRPCContext:
     file: ProtoFile
     module: ModuleInfo
-    external_modules: t.MutableSet[ModuleInfo]
     builder: GRPCASTBuilder
     nested: t.MutableSequence[ast.stmt] = field(default_factory=list)
     methods: t.MutableSequence[MethodInfo] = field(default_factory=list)
@@ -40,6 +37,5 @@ class GRPCContext:
         return GRPCContext(
             file=self.file,
             module=self.module,
-            external_modules=self.external_modules,
             builder=self.builder,
         )

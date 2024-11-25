@@ -141,7 +141,7 @@ class ContextBuilder(ProtoVisitor[object], LoggerMixin):
         proto_path = ".".join(ns)
 
         qualname = f".{root.item.package}.{proto_path}"
-        module = root.file.pb2_message
+        module = root.file.pb2_module
 
         return qualname, module, ns
 

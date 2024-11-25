@@ -34,7 +34,6 @@ class Scope:
 class BrokRPCContext(ModuleASTContext):
     builder: ASTBuilder
     module: ModuleInfo
-    deps: t.MutableSet[ModuleInfo]
     scopes: MutableStack[Scope]
 
 
@@ -52,7 +51,6 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
             context.meta.modules.update(
                 {
                     context.meta.module.file: context.meta.builder.build_module(
-                        deps=context.meta.deps,
                         doc=f"Source: {context.file.proto_path}",
                         body=scope.body,
                     ),

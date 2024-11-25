@@ -31,32 +31,30 @@ class MypyStubContext(ModuleASTContext):
 
 
 class MypyStubASTGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
-    def __init__(
-        self,
-        registry: TypeRegistry,
-        message_context_factory: t.Callable[[ProtoFile], MessageContext],
-        grpc_context_factory: t.Callable[[ProtoFile], GRPCContext],
-    ) -> None:
+    def __init__(self, registry: TypeRegistry) -> None:
         self.__registry = registry
-        self.__message_context_factory = message_context_factory
-        self.__grpc_context_factory = grpc_context_factory
 
     def enter_file_descriptor_proto(self, context: FileDescriptorContext[MypyStubContext]) -> None:
-        context.meta.messages.put(self.__message_context_factory(context.file))
-        context.meta.grpcs.put(self.__grpc_context_factory(context.file))
+        # context.meta.messages.put(self.__message_context_factory(context.file))
+        # context.meta.grpcs.put(self.__grpc_context_factory(context.file))
+        pass
 
     def leave_file_descriptor_proto(self, context: FileDescriptorContext[MypyStubContext]) -> None:
-        message = context.meta.messages.pop()
-        grpc = context.meta.grpcs.pop()
+        message = context.meta.messages.get_last()
+        grpc = context.meta.grpcs.get_last()
 
         context.meta.modules.update(
             {
                 message.module.stub_file: message.builder.build_protobuf_message_module(
-                    deps=message.external_modules,
-                    body=message.nested,
+                    body=[
+                        *message.nested,
+                        # *message.builder.build_protobuf_message_field_stubs(message.fields),
+                        # *self.__build_service_descriptors(context, grpc),
+                        # *(self.__build_extension_field(message.builder.inner, field) for field in message.fields),
+                        # *self.__build_file_descriptor(context, message),
+                    ],
                 ),
                 grpc.module.stub_file: grpc.builder.build_grpc_module(
-                    deps=grpc.external_modules,
                     body=grpc.nested,
                 ),
             }

@@ -30,10 +30,38 @@ class DependencyResolver(metaclass=abc.ABCMeta):
     def resolve(self, info: TypeInfo) -> TypeInfo:
         raise NotImplementedError
 
+    @abc.abstractmethod
+    def get_dependencies(self) -> t.Sequence[ModuleInfo]:
+        raise NotImplementedError
+
 
 class NoDependencyResolver(DependencyResolver):
     def resolve(self, info: TypeInfo) -> TypeInfo:
         return info
+
+    def get_dependencies(self) -> t.Sequence[ModuleInfo]:
+        return []
+
+
+class ModuleDependencyResolver(DependencyResolver):
+    def __init__(self, module: ModuleInfo) -> None:
+        self.__module = module
+        self.__deps: t.Set[ModuleInfo] = set()
+
+    def resolve(self, info: TypeInfo) -> TypeInfo:
+        if info.module == self.__module:
+            return TypeInfo(None, info.ns)
+
+        if info.module is not None:
+            self.__deps.add(info.module)
+
+        return info
+
+    def get_dependencies(self) -> t.Sequence[ModuleInfo]:
+        return sorted(self.__deps or (), key=self.__get_dep_sort_key)
+
+    def __get_dep_sort_key(self, module: ModuleInfo) -> str:
+        return module.qualname
 
 
 class ASTBuilder:
@@ -577,14 +605,13 @@ class ASTBuilder:
     def build_module(
         self,
         doc: t.Optional[str] = None,
-        deps: t.Optional[t.Collection[ModuleInfo]] = None,
         body: t.Optional[t.Sequence[ast.stmt]] = None,
     ) -> ast.Module:
         return ast.Module(
             body=self._build_body(
                 doc,
                 [
-                    *(self.build_import(dep) for dep in sorted(deps or (), key=lambda d: d.qualname)),
+                    *(self.build_import(dep) for dep in self.__resolver.get_dependencies()),
                     *(body or ()),
                 ],
             ),

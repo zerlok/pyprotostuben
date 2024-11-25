@@ -10,11 +10,10 @@ from pyprotostuben.codegen.module_ast import ModuleASTBasedProtoFileGenerator
 from pyprotostuben.logging import LoggerMixin
 from pyprotostuben.pool.abc import Pool
 from pyprotostuben.pool.process import MultiProcessPool, SingleProcessPool
-from pyprotostuben.protobuf.builder.resolver import ProtoDependencyResolver
 from pyprotostuben.protobuf.context import CodeGeneratorContext, ContextBuilder
 from pyprotostuben.protobuf.file import ProtoFile
 from pyprotostuben.protobuf.parser import CodeGeneratorParameters
-from pyprotostuben.python.ast_builder import ASTBuilder
+from pyprotostuben.python.ast_builder import ASTBuilder, ModuleDependencyResolver
 from pyprotostuben.python.info import ModuleInfo
 from pyprotostuben.stack import MutableStack
 
@@ -70,14 +69,12 @@ class _MultiProcessFuncs:
 
     @staticmethod
     def create_visitor_context(file: ProtoFile) -> BrokRPCContext:
-        deps = set[ModuleInfo]()
         module = ModuleInfo(file.pb2_package, f"{file.name}_brokrpc")
 
         return BrokRPCContext(
             file=file,
             modules={},
-            deps=deps,
             module=module,
-            builder=ASTBuilder(ProtoDependencyResolver(module, deps)),
+            builder=ASTBuilder(ModuleDependencyResolver(module)),
             scopes=MutableStack(),
         )
