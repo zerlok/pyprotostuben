@@ -24,7 +24,7 @@ class BrokRPCProtocPlugin(ProtocPlugin, LoggerMixin):
         log.debug("request received")
 
         with ExitStack() as cm_stack:
-            context = ContextBuilder.build(request)
+            context = ContextBuilder().build(request)
             gen = self.__create_generator(context)
             pool = self.__create_pool(context.params, cm_stack)
 
