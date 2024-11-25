@@ -8,17 +8,17 @@ from pyprotostuben.python.info import ModuleInfo, PackageInfo
 
 
 class ProtoFile:
-    def __init__(self, descriptor: FileDescriptorProto) -> None:
-        self.__descriptor = descriptor
+    def __init__(self, proto: FileDescriptorProto) -> None:
+        self.__proto = proto
 
     def __str__(self) -> str:
-        return f"<{self.__class__.__name__} {self.proto_path}>"
+        return f"<{self.__class__.__name__}: {self.proto_path}>"
 
     __repr__ = __str__
 
     @property
-    def descriptor(self) -> FileDescriptorProto:
-        return self.__descriptor
+    def proto(self) -> FileDescriptorProto:
+        return self.__proto
 
     @ft.cached_property
     def name(self) -> str:
@@ -26,7 +26,7 @@ class ProtoFile:
 
     @ft.cached_property
     def proto_path(self) -> Path:
-        return Path(self.__descriptor.name)
+        return Path(self.__proto.name)
 
     @ft.cached_property
     def pb2_package(self) -> t.Optional[PackageInfo]:

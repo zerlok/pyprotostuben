@@ -62,8 +62,7 @@ class _MultiProcessFuncs:
         module = ModuleInfo(file.pb2_package, f"{file.name}_brokrpc")
 
         return BrokRPCContext(
-            file=file,
-            modules={},
+            generated_modules={},
             module=module,
             builder=ASTBuilder(ModuleDependencyResolver(module)),
             scopes=MutableStack(),

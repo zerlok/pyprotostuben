@@ -70,19 +70,19 @@ class ASTBuilder:
 
     @cached_property
     def typing_module(self) -> ModuleInfo:
-        return ModuleInfo.from_str("typing")
+        return ModuleInfo(None, "typing")
 
     @cached_property
     def builtins_module(self) -> ModuleInfo:
-        return ModuleInfo.from_str("builtins")
+        return ModuleInfo(None, "builtins")
 
     @cached_property
     def abc_module(self) -> ModuleInfo:
-        return ModuleInfo.from_str("abc")
+        return ModuleInfo(None, "abc")
 
     @cached_property
     def contextlib_module(self) -> ModuleInfo:
-        return ModuleInfo.from_str("contextlib")
+        return ModuleInfo(None, "contextlib")
 
     def build_ref(self, ref: TypeRef) -> ast.expr:
         if not isinstance(ref, TypeInfo):
@@ -130,7 +130,7 @@ class ASTBuilder:
         is_final: bool = False,
         is_async: bool = False,
         is_context_manager: bool = False,
-    ) -> ast.stmt:
+    ) -> t.Union[ast.FunctionDef, ast.AsyncFunctionDef]:
         head_decorators = [
             TypeInfo.build(self.typing_module, "final") if is_final else None,
             self.build_context_manager_decorator_ref(is_async=is_async) if is_context_manager else None,
@@ -174,7 +174,7 @@ class ASTBuilder:
         is_final: bool = False,
         is_async: bool = False,
         is_context_manager: bool = False,
-    ) -> ast.stmt:
+    ) -> t.Union[ast.FunctionDef, ast.AsyncFunctionDef]:
         return self.build_func_def(
             name=name,
             decorators=decorators,
@@ -235,7 +235,7 @@ class ASTBuilder:
         name: str,
         items: t.Mapping[str, TypeRef],
         is_final: bool = False,
-    ) -> ast.stmt:
+    ) -> ast.ClassDef:
         # TODO: support inline typed dict (it is in experimental feature).
         #  https://mypy.readthedocs.io/en/stable/typed_dict.html#inline-typeddict-types
         return self.build_class_def(
@@ -265,7 +265,7 @@ class ASTBuilder:
         is_final: bool = False,
         is_async: bool = False,
         is_context_manager: bool = False,
-    ) -> ast.stmt:
+    ) -> t.Union[ast.FunctionDef, ast.AsyncFunctionDef]:
         return self.build_func_def(
             name=name,
             decorators=decorators,
@@ -289,7 +289,7 @@ class ASTBuilder:
         is_final: bool = False,
         is_async: bool = False,
         is_context_manager: bool = False,
-    ) -> ast.stmt:
+    ) -> t.Union[ast.FunctionDef, ast.AsyncFunctionDef]:
         return self.build_method_def(
             name=name,
             decorators=decorators,
@@ -311,7 +311,7 @@ class ASTBuilder:
         doc: t.Optional[str] = None,
         is_async: bool = False,
         is_context_manager: bool = False,
-    ) -> ast.stmt:
+    ) -> t.Union[ast.FunctionDef, ast.AsyncFunctionDef]:
         return self.build_method_def(
             name=name,
             decorators=[TypeInfo.build(self.abc_module, "abstractmethod")],
@@ -331,7 +331,7 @@ class ASTBuilder:
         doc: t.Optional[str] = None,
         is_async: bool = False,
         is_context_manager: bool = False,
-    ) -> ast.stmt:
+    ) -> t.Union[ast.FunctionDef, ast.AsyncFunctionDef]:
         return self.build_method_stub(
             name=name,
             decorators=[TypeInfo.build(self.abc_module, "abstractmethod")],
@@ -353,7 +353,7 @@ class ASTBuilder:
         is_final: bool = False,
         is_async: bool = False,
         is_context_manager: bool = False,
-    ) -> ast.stmt:
+    ) -> t.Union[ast.FunctionDef, ast.AsyncFunctionDef]:
         return self.build_func_def(
             name=name,
             decorators=[*(decorators or ()), TypeInfo.build(self.builtins_module, "classmethod")],
@@ -372,7 +372,7 @@ class ASTBuilder:
         name: str,
         annotation: TypeRef,
         doc: t.Optional[str] = None,
-    ) -> ast.stmt:
+    ) -> t.Union[ast.FunctionDef, ast.AsyncFunctionDef]:
         return self.build_method_stub(
             name=name,
             decorators=[TypeInfo.build(self.builtins_module, "property")],
@@ -387,7 +387,7 @@ class ASTBuilder:
         name: str,
         annotation: TypeRef,
         doc: t.Optional[str] = None,
-    ) -> ast.stmt:
+    ) -> t.Union[ast.FunctionDef, ast.AsyncFunctionDef]:
         return self.build_method_stub(
             name=name,
             decorators=[self.build_name(name, "setter")],
@@ -402,7 +402,7 @@ class ASTBuilder:
         args: t.Sequence[FuncArgInfo],
         body: t.Sequence[ast.stmt],
         doc: t.Optional[str] = None,
-    ) -> ast.stmt:
+    ) -> t.Union[ast.FunctionDef, ast.AsyncFunctionDef]:
         return self.build_method_def(
             name="__init__",
             args=args,
@@ -416,8 +416,22 @@ class ASTBuilder:
         self,
         args: t.Sequence[FuncArgInfo],
         doc: t.Optional[str] = None,
-    ) -> ast.stmt:
+    ) -> t.Union[ast.FunctionDef, ast.AsyncFunctionDef]:
         return self.build_init_def(args=args, body=self._build_stub_body(doc), doc=doc)
+
+    @t.overload
+    def build_attr_assign(self, head: TypeRef, *, value: TypeRef) -> ast.stmt: ...
+
+    @t.overload
+    def build_attr_assign(self, head: str, *tail: str, value: TypeRef) -> ast.stmt: ...
+
+    def build_attr_assign(self, head: t.Union[str, TypeRef], *tail: str, value: TypeRef) -> ast.stmt:
+        return ast.Assign(
+            targets=[self.build_ref(head) if isinstance(head, (ast.expr, TypeInfo)) else self.build_name(head, *tail)],
+            value=self.build_ref(value),
+            # NOTE: Seems like it is allowed to pass `None`, but ast typing says it's not.
+            lineno=t.cast(int, None),
+        )
 
     def build_attr_stub(
         self,
@@ -433,14 +447,6 @@ class ASTBuilder:
             annotation=self.build_final_ref(self.build_ref(annotation)) if is_final else self.build_ref(annotation),
             value=default,
             simple=1,
-        )
-
-    def build_attr_assign(self, target: TypeRef, value: TypeRef) -> ast.stmt:
-        return ast.Assign(
-            targets=[self.build_ref(target)],
-            value=self.build_ref(value),
-            # NOTE: Seems like it is allowed to pass `None`, but ast typing says it's not.
-            lineno=t.cast(int, None),
         )
 
     def build_call(
@@ -481,7 +487,7 @@ class ASTBuilder:
         items: t.Sequence[t.Tuple[str, TypeRef]],
         body: t.Sequence[ast.stmt],
         is_async: bool = False,
-    ) -> ast.stmt:
+    ) -> t.Union[ast.With, ast.AsyncWith]:
         with_items = [
             ast.withitem(
                 context_expr=self.build_ref(expr),
@@ -509,10 +515,10 @@ class ASTBuilder:
     def build_yield_stmt(self, value: ast.expr) -> ast.stmt:
         return ast.Expr(value=ast.Yield(value=value))
 
-    def build_return_stmt(self, value: ast.expr) -> ast.stmt:
+    def build_return_stmt(self, value: ast.expr) -> ast.Return:
         return ast.Return(value=value)
 
-    def build_pass_stmt(self) -> ast.stmt:
+    def build_pass_stmt(self) -> ast.Pass:
         return ast.Pass()
 
     def build_context_manager_decorator_ref(self, *, is_async: bool = False) -> ast.expr:
@@ -520,7 +526,7 @@ class ASTBuilder:
             TypeInfo.build(self.contextlib_module, "asynccontextmanager" if is_async else "contextmanager")
         )
 
-    def build_raise_not_implemented_error(self) -> ast.stmt:
+    def build_raise_not_implemented_error(self) -> ast.Raise:
         return ast.Raise(exc=ast.Name(id="NotImplementedError"), cause=None)
 
     def build_generic_ref(self, generic: TypeRef, *args: TypeRef) -> ast.expr:
@@ -596,10 +602,10 @@ class ASTBuilder:
     def build_str_ref(self) -> ast.expr:
         return self.build_ref(TypeInfo.build(self.builtins_module, "str"))
 
-    def build_const(self, value: object) -> ast.expr:
+    def build_const(self, value: object) -> ast.Constant:
         return ast.Constant(value=value)
 
-    def build_import(self, module: ModuleInfo) -> ast.stmt:
+    def build_import(self, module: ModuleInfo) -> ast.Import:
         return ast.Import(names=[ast.alias(name=module.qualname)])
 
     def build_module(

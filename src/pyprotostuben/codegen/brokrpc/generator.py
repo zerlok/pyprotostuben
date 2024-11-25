@@ -3,9 +3,9 @@ import typing as t
 from dataclasses import dataclass, field
 from functools import cached_property
 
-from pyprotostuben.codegen.module_ast import ModuleASTContext
+from pyprotostuben.codegen.module_ast import ModuleAstContext
+from pyprotostuben.codegen.mypy.model import MethodInfo
 from pyprotostuben.logging import LoggerMixin
-from pyprotostuben.protobuf.builder.grpc import MethodInfo
 from pyprotostuben.protobuf.location import build_docstring
 from pyprotostuben.protobuf.registry import TypeRegistry
 from pyprotostuben.protobuf.visitor.decorator import ProtoVisitorDecorator
@@ -32,7 +32,7 @@ class Scope:
 
 
 @dataclass()
-class BrokRPCContext(ModuleASTContext):
+class BrokRPCContext(ModuleAstContext):
     builder: ASTBuilder
     module: ModuleInfo
     scopes: MutableStack[Scope]
@@ -49,7 +49,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
         scope = context.meta.scopes.pop()
 
         if scope.body:
-            context.meta.modules.update(
+            context.meta.generated_modules.update(
                 {
                     context.meta.module.file: context.meta.builder.build_module(
                         doc=f"Source: {context.file.proto_path}",
@@ -119,10 +119,10 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
             MethodInfo(
                 name=camel2snake(context.proto.name),
                 doc=build_docstring(context.location),
-                client_input=builder.build_ref(self.__registry.resolve_proto_method_client_input(context.proto)),
-                client_streaming=False,
+                server_input=builder.build_ref(self.__registry.resolve_proto_method_client_input(context.proto)),
+                server_input_streaming=context.proto.client_streaming,
                 server_output=builder.build_ref(self.__registry.resolve_proto_method_server_output(context.proto)),
-                server_streaming=False,
+                server_output_streaming=context.proto.server_streaming,
             )
         )
 
@@ -143,7 +143,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
                     args=[
                         builder.build_pos_arg(
                             name="request",
-                            annotation=builder.build_generic_ref(self.__brokrpc_request, method.client_input),
+                            annotation=builder.build_generic_ref(self.__brokrpc_request, method.server_input),
                         )
                     ],
                     returns=method.server_output,
@@ -212,7 +212,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
                     name=method.name,
                     annotation=builder.build_generic_ref(
                         self.__brokrpc_caller,
-                        method.client_input,
+                        method.server_input,
                         method.server_output,
                     ),
                 )
@@ -220,7 +220,8 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
             ],
             body=[
                 builder.build_attr_assign(
-                    target=builder.build_name("self", f"__{method.name}"),
+                    "self",
+                    f"__{method.name}",
                     value=builder.build_name(method.name),
                 )
                 for method in methods
@@ -233,7 +234,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
             args=[
                 builder.build_pos_arg(
                     name="request",
-                    annotation=method.client_input,
+                    annotation=method.server_input,
                 ),
             ],
             returns=builder.build_generic_ref(self.__brokrpc_response, method.server_output),
@@ -313,7 +314,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
         return builder.build_call(
             func=builder.build_ref(self.__brokrpc_serializer),
             args=[
-                method.client_input,
+                method.server_input,
                 method.server_output,
             ],
         )
