@@ -79,7 +79,7 @@ class ContextBuilder(ProtoVisitor[object], LoggerMixin):
         pass
 
     def visit_descriptor_proto(self, context: DescriptorContext[object]) -> None:
-        proto = context.item
+        proto = context.proto
 
         if proto.options.map_entry:
             self.__register_map_entry(
@@ -104,17 +104,17 @@ class ContextBuilder(ProtoVisitor[object], LoggerMixin):
         pass
 
     def __register_file(self, context: FileDescriptorContext[object]) -> None:
-        self.__files[context.item.name] = context.file
+        self.__files[context.proto.name] = context.file
 
     def __register_enum(self, context: EnumDescriptorContext[object]) -> None:
-        qualname, module, ns = self.__build_type(context.root_context, context)
+        qualname, module, ns = self.__build_type(context.root, context)
         info = self.__infos[qualname] = EnumInfo(module, ns)
 
         self._log.info("registered", qualname=qualname, info=info)
 
     def __register_message(self, context: t.Union[FileDescriptorContext[object], DescriptorContext[object]]) -> None:
         qualname, module, ns = self.__build_type(
-            root=context.root_context if isinstance(context, DescriptorContext) else context,
+            root=context.root if isinstance(context, DescriptorContext) else context,
             context=context,
         )
         info = self.__infos[qualname] = MessageInfo(module, ns)
@@ -127,7 +127,7 @@ class ContextBuilder(ProtoVisitor[object], LoggerMixin):
         key: FieldDescriptorProto,
         value: FieldDescriptorProto,
     ) -> None:
-        qualname, module, _ = self.__build_type(context.root_context, context)
+        qualname, module, _ = self.__build_type(context.root, context)
         placeholder = self.__map_entries[qualname] = MapEntryPlaceholder(module, key, value)
 
         self._log.info("registered", qualname=qualname, placeholder=placeholder)
@@ -140,7 +140,7 @@ class ContextBuilder(ProtoVisitor[object], LoggerMixin):
         ns = [desc.name for desc in context.parts[1:]]
         proto_path = ".".join(ns)
 
-        qualname = f".{root.item.package}.{proto_path}"
+        qualname = f".{root.proto.package}.{proto_path}"
         module = root.file.pb2_module
 
         return qualname, module, ns

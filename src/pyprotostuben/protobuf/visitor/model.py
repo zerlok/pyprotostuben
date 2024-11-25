@@ -35,75 +35,51 @@ T_co = t.TypeVar("T_co", covariant=True, bound=Proto)
 @dataclass(frozen=True)
 class BaseContext(t.Generic[M_co, T_co]):
     meta: M_co
-    item: T_co
+    proto: T_co
     path: t.Sequence[int]
 
     @property
     def parts(self) -> t.Sequence[Proto]:
-        return (self.item,)
+        return (self.proto,)
 
 
 @dataclass(frozen=True)
 class FileDescriptorContext(BaseContext[M_co, FileDescriptorProto]):
     @cached_property
     def file(self) -> ProtoFile:
-        return ProtoFile(self.item)
+        return ProtoFile(self.proto)
 
     @cached_property
     def locations(self) -> t.Mapping[t.Sequence[int], SourceCodeInfo.Location]:
-        return {tuple(loc.path): loc for loc in self.item.source_code_info.location}
+        return {tuple(loc.path): loc for loc in self.proto.source_code_info.location}
 
 
 @dataclass(frozen=True)
 class ChildContext(BaseContext[M_co, T_co], t.Generic[M_co, T_co, P_co]):
-    parent_context: BaseContext[M_co, P_co]
+    parent: BaseContext[M_co, P_co]
 
     @cached_property
-    def root_context(self) -> FileDescriptorContext[M_co]:
-        ctx = self.parent_context
+    def root(self) -> FileDescriptorContext[M_co]:
+        ctx = self.parent
 
         while isinstance(ctx, ChildContext):
-            ctx = ctx.parent_context
+            ctx = ctx.parent
 
         assert isinstance(ctx, FileDescriptorContext)
 
         return ctx
 
-    @property
-    def root(self) -> FileDescriptorProto:
-        return self.root_context.item
-
     @cached_property
     def file(self) -> ProtoFile:
-        return self.root_context.file
-
-    @property
-    def parent(self) -> P_co:
-        return self.parent_context.item
+        return self.root.file
 
     @cached_property
     def parts(self) -> t.Sequence[Proto]:
-        return *self.parent_context.parts, self.item
+        return *self.parent.parts, self.proto
 
     @cached_property
     def location(self) -> t.Optional[SourceCodeInfo.Location]:
-        return self.root_context.locations.get(self.path)
-
-    @property
-    def comments(self) -> t.Sequence[str]:
-        if self.location is None:
-            return []
-
-        blocks: t.List[str] = []
-        blocks.extend(comment.strip() for comment in self.location.leading_detached_comments)
-
-        if self.location.HasField("leading_comments"):
-            blocks.append(self.location.leading_comments.strip())
-
-        if self.location.HasField("trailing_comments"):
-            blocks.append(self.location.trailing_comments.strip())
-
-        return blocks
+        return self.root.locations.get(self.path)
 
 
 @dataclass(frozen=True)

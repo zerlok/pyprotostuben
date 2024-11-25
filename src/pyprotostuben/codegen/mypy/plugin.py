@@ -79,7 +79,7 @@ class _MultiProcessFuncs:
         return MypyStubContext(
             file=file,
             modules={},
-            messages=MutableStack(
+            descriptors=MutableStack(
                 [
                     MessageContext(
                         file=file,
