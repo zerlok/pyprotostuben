@@ -1,13 +1,14 @@
 import typing
 import typing as t
 
-from google.protobuf.descriptor import (
-    Descriptor,
-    EnumDescriptor,
-    FieldDescriptor,
-    FileDescriptor,
-    MethodDescriptor,
-    ServiceDescriptor,
+from google.protobuf.descriptor import FieldDescriptor
+from google.protobuf.descriptor_pb2 import (
+    DescriptorProto,
+    EnumDescriptorProto,
+    FieldDescriptorProto,
+    FileDescriptorProto,
+    MethodDescriptorProto,
+    ServiceDescriptorProto,
 )
 
 C = t.TypeVar("C")
@@ -20,12 +21,17 @@ class ExtensionDescriptor(t.Generic[C, T], FieldDescriptor):
 
 
 def get_extension(
-    source: FileDescriptor | EnumDescriptor | Descriptor | FieldDescriptor | ServiceDescriptor | MethodDescriptor,
+    source: FileDescriptorProto
+    | EnumDescriptorProto
+    | DescriptorProto
+    | FieldDescriptorProto
+    | ServiceDescriptorProto
+    | MethodDescriptorProto,
     ext: ExtensionDescriptor[t.Any, T],
 ) -> t.Optional[T]:
     """Get extension from the source options, type safe."""
 
-    opts = source.GetOptions()
+    opts = source.options
     # TODO: find a way to get `_ExtensionFieldDescriptor` type which is expected in `HasExtension`.
     if not opts.HasExtension(t.cast(t.Any, ext)):
         return None

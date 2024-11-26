@@ -22,14 +22,14 @@ tests-mypy = ["mypy (>=1.11.1)", "pytest-mypy-plugins"]
 
 [[package]]
 name = "brokrpc"
-version = "0.1.0"
+version = "0.2.0"
 description = "framework for gRPC like server-client communication over message brokers"
 category = "dev"
 optional = false
 python-versions = "<4.0,>=3.12"
 files = [
-    {file = "brokrpc-0.1.0-py3-none-any.whl", hash = "sha256:75b57dd6d53769b372d5a24665158d6de4ad38287581d3ae7c059447fc13b8e9"},
-    {file = "brokrpc-0.1.0.tar.gz", hash = "sha256:de5242e40e1bfe92a29f6dc87f87ec1e30ac824a999b44c14791f6b998e39b1d"},
+    {file = "brokrpc-0.2.0-py3-none-any.whl", hash = "sha256:a091fc99a730e7c9e5a50e0d46428d9aa11e9a9b4c9b0759854bc083808a3beb"},
+    {file = "brokrpc-0.2.0.tar.gz", hash = "sha256:607712fd05da37ea9669106a499bee41870c0ff19ecaed407266dde674131e03"},
 ]
 
 [package.dependencies]
@@ -1242,4 +1242,4 @@ propcache = ">=0.2.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "26d9cf8ff919f05e1afea21cd3c1c50ac7bb360783b903e7ab550972c35710a8"
+content-hash = "54296d162df2f69d00be8d81994fda3412ef461ba1b688d2aed8331e0257fb10"

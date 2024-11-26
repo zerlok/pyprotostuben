@@ -150,16 +150,15 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
     def leave_method_descriptor_proto(self, context: MethodDescriptorContext[BrokRPCContext]) -> None:
         proto = context.proto
         parent = context.meta
-        builder = parent.builder
 
         parent.methods.append(
             MethodInfo(
                 name=camel2snake(proto.name),
                 qualname=f"/{context.root.proto.package}/{context.parent.proto.name}/{proto.name}",
                 doc=build_docstring(context.location),
-                server_input=builder.build_ref(self.__registry.resolve_proto_method_client_input(proto)),
+                server_input=self.__registry.resolve_proto_method_client_input(proto),
                 server_input_streaming=proto.client_streaming,
-                server_output=builder.build_ref(self.__registry.resolve_proto_method_server_output(proto)),
+                server_output=self.__registry.resolve_proto_method_server_output(proto),
                 server_output_streaming=proto.server_streaming,
             )
         )
