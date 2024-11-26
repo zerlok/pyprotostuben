@@ -104,10 +104,9 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
         )
 
     def enter_enum_descriptor_proto(self, context: EnumDescriptorContext[MypyStubContext]) -> None:
-        context.meta = self.__create_sub_context(context.meta)
+        context.meta = self.__create_sub_context(context)
 
     def leave_enum_descriptor_proto(self, context: EnumDescriptorContext[MypyStubContext]) -> None:
-        proto = context.proto
         scope = context.meta
         parent = context.parent.meta
         builder = scope.pb2_builder
@@ -116,7 +115,7 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
             EnumInfo(
                 body=[
                     builder.build_enum_def(
-                        name=proto.name,
+                        path=self.__get_class_path(context),
                         doc=build_docstring(context.location),
                         scope=scope,
                     )
@@ -145,7 +144,7 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
         )
 
     def enter_descriptor_proto(self, context: DescriptorContext[MypyStubContext]) -> None:
-        context.meta = self.__create_sub_context(context.meta)
+        context.meta = self.__create_sub_context(context)
 
     def leave_descriptor_proto(self, context: DescriptorContext[MypyStubContext]) -> None:
         proto = context.proto
@@ -160,7 +159,7 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
             MessageInfo(
                 body=[
                     builder.build_message_def(
-                        name=proto.name,
+                        path=self.__get_class_path(context),
                         doc=build_docstring(context.location),
                         scope=scope,
                     ),
@@ -211,7 +210,7 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
         #     (proto)
 
     def enter_service_descriptor_proto(self, context: ServiceDescriptorContext[MypyStubContext]) -> None:
-        context.meta = self.__create_sub_context(context.meta)
+        context.meta = self.__create_sub_context(context)
 
     def leave_service_descriptor_proto(self, context: ServiceDescriptorContext[MypyStubContext]) -> None:
         name = context.proto.name
@@ -223,6 +222,7 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
 
         parent.services.append(
             ServiceInfo(
+                name=name,
                 servicer=builder.build_servicer_def(name, doc, scope),
                 registrator=builder.build_servicer_registrator_def(name),
                 stub=builder.build_stub_def(name, doc, scope),
@@ -266,13 +266,20 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
             methods=[],
         )
 
-    def __create_sub_context(self, context: MypyStubContext) -> MypyStubContext:
+    def __create_sub_context(
+        self,
+        context: t.Union[
+            EnumDescriptorContext[MypyStubContext],
+            DescriptorContext[MypyStubContext],
+            ServiceDescriptorContext[MypyStubContext],
+        ],
+    ) -> MypyStubContext:
         return MypyStubContext(
-            generated_modules=context.generated_modules,
-            _pb2_module=context.pb2_module,
-            _pb2_builder=context.pb2_builder,
-            _pb2_grpc_module=context.pb2_grpc_module,
-            _pb2_grpc_builder=context.pb2_grpc_builder,
+            generated_modules=context.meta.generated_modules,
+            _pb2_module=context.meta.pb2_module,
+            _pb2_builder=context.meta.pb2_builder,
+            _pb2_grpc_module=context.meta.pb2_grpc_module,
+            _pb2_grpc_builder=context.meta.pb2_grpc_builder,
             enums=[],
             enum_values=[],
             messages=[],
@@ -281,3 +288,10 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
             services=[],
             methods=[],
         )
+
+    def __get_class_path(
+        self,
+        context: t.Union[EnumDescriptorContext[MypyStubContext], DescriptorContext[MypyStubContext]],
+    ) -> t.Sequence[str]:
+        # skip first part (root = file descriptor)
+        return [part.proto.name for part in context.parts[1:]]

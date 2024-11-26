@@ -50,8 +50,8 @@ class _BaseContext(t.Generic[M, T_co]):
         self._meta = value
 
     @property
-    def parts(self) -> t.Sequence[Proto]:
-        return (self.proto,)
+    def parts(self) -> t.Sequence["_BaseContext[M, Proto]"]:
+        return (self,)
 
 
 @dataclass()
@@ -85,8 +85,8 @@ class _ChildContext(_BaseContext[M, T_co], t.Generic[M, T_co, P_co]):
         return self.root.file
 
     @cached_property
-    def parts(self) -> t.Sequence[Proto]:
-        return *self.parent.parts, self.proto
+    def parts(self) -> t.Sequence["_BaseContext[M, Proto]"]:
+        return *self.parent.parts, self
 
     @cached_property
     def location(self) -> t.Optional[SourceCodeInfo.Location]:

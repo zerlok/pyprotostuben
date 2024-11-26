@@ -34,6 +34,7 @@ class FieldInfo:
 
 @dataclass()
 class ServiceInfo:
+    name: str
     servicer: t.Sequence[ast.stmt]
     registrator: t.Sequence[ast.stmt]
     stub: t.Sequence[ast.stmt]

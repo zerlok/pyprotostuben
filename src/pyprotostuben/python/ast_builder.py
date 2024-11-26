@@ -593,6 +593,9 @@ class ASTBuilder:
             inner,
         )
 
+    def build_union_ref(self, *args: TypeRef) -> ast.expr:
+        return self.build_generic_ref(TypeInfo.build(self.typing_module, "Union"), *args)
+
     def build_context_manager_ref(self, inner: TypeRef, *, is_async: bool = False) -> ast.expr:
         return self.build_generic_ref(
             TypeInfo.build(self.typing_module, "AsyncContextManager" if is_async else "ContextManager"),
