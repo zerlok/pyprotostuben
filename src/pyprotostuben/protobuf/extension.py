@@ -21,12 +21,14 @@ class ExtensionDescriptor(t.Generic[C, T], FieldDescriptor):
 
 
 def get_extension(
-    source: FileDescriptorProto
-    | EnumDescriptorProto
-    | DescriptorProto
-    | FieldDescriptorProto
-    | ServiceDescriptorProto
-    | MethodDescriptorProto,
+    source: t.Union[
+        FileDescriptorProto,
+        EnumDescriptorProto,
+        DescriptorProto,
+        FieldDescriptorProto,
+        ServiceDescriptorProto,
+        MethodDescriptorProto,
+    ],
     ext: ExtensionDescriptor[t.Any, T],
 ) -> t.Optional[T]:
     """Get extension from the source options, type safe."""
