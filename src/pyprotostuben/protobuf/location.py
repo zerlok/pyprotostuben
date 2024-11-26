@@ -7,7 +7,7 @@ def get_comment_blocks(location: t.Optional[SourceCodeInfo.Location]) -> t.Seque
     if location is None:
         return []
 
-    blocks: t.List[str] = []
+    blocks: list[str] = []
     blocks.extend(comment.strip() for comment in location.leading_detached_comments)
 
     if location.HasField("leading_comments"):

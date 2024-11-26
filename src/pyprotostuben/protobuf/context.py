@@ -40,9 +40,9 @@ class CodeGeneratorContext:
 
 @dataclass()
 class BuildContext:
-    files: t.Dict[str, ProtoFile] = field(default_factory=dict)
-    types: t.Dict[str, t.Union[EnumInfo, MessageInfo]] = field(default_factory=dict)
-    map_entries: t.Dict[str, MapEntryPlaceholder] = field(default_factory=dict)
+    files: dict[str, ProtoFile] = field(default_factory=dict)
+    types: dict[str, t.Union[EnumInfo, MessageInfo]] = field(default_factory=dict)
+    map_entries: dict[str, MapEntryPlaceholder] = field(default_factory=dict)
 
 
 class ContextBuilder(ProtoVisitor[BuildContext], LoggerMixin):
@@ -141,7 +141,7 @@ class ContextBuilder(ProtoVisitor[BuildContext], LoggerMixin):
             EnumContext[BuildContext],
             DescriptorContext[BuildContext],
         ],
-    ) -> t.Tuple[str, ModuleInfo, t.Sequence[str]]:
+    ) -> tuple[str, ModuleInfo, t.Sequence[str]]:
         ns = [part.proto.name for part in context.parts[1:]]
         proto_path = ".".join(ns)
 

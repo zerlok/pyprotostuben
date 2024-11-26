@@ -81,7 +81,7 @@ class TypeInfo:
         return cls(ModuleInfo.from_str(module), ns.split("."))
 
     @classmethod
-    def from_type(cls, type_: t.Type[object]) -> "TypeInfo":
+    def from_type(cls, type_: type[object]) -> "TypeInfo":
         return cls(ModuleInfo.from_str(type_.__module__), type_.__qualname__.split("."))
 
     @classmethod
