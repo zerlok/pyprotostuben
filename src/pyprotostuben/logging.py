@@ -60,16 +60,17 @@ class Logger(
     def get(
         # allow callee to pass custom `cls` kwarg
         __cls,  # noqa: N804
-        __name: str,
+        name: str,
+        /,
         **kwargs: object,
     ) -> "Logger":
-        return __cls(getLogger(__name), kwargs)
+        return __cls(getLogger(name), kwargs)
 
     def process(
         self,
         msg: object,
         kwargs: t.MutableMapping[str, object],
-    ) -> t.Tuple[object, t.MutableMapping[str, object]]:
+    ) -> tuple[object, t.MutableMapping[str, object]]:
         exc_info = kwargs.pop("exc_info", None)
         return msg, {
             "exc_info": exc_info,

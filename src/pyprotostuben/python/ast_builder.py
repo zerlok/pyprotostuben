@@ -46,7 +46,7 @@ class NoDependencyResolver(DependencyResolver):
 class ModuleDependencyResolver(DependencyResolver):
     def __init__(self, module: ModuleInfo) -> None:
         self.__module = module
-        self.__deps: t.Set[ModuleInfo] = set()
+        self.__deps: set[ModuleInfo] = set()
 
     def resolve(self, info: TypeInfo) -> TypeInfo:
         if info.module == self.__module:
@@ -508,7 +508,7 @@ class ASTBuilder:
     def build_with_stmt(
         self,
         *,
-        items: t.Sequence[t.Tuple[str, TypeRef]],
+        items: t.Sequence[tuple[str, TypeRef]],
         body: t.Sequence[ast.stmt],
         is_async: bool = False,
     ) -> t.Union[ast.With, ast.AsyncWith]:
@@ -660,7 +660,7 @@ class ASTBuilder:
     def _build_decorators(
         self,
         *decorators: t.Optional[t.Sequence[t.Union[ast.expr, TypeInfo, None]]],
-    ) -> t.List[ast.expr]:
+    ) -> list[ast.expr]:
         return [
             self.build_ref(dec) for block in (decorators or ()) if block for dec in (block or ()) if dec is not None
         ]
@@ -696,14 +696,14 @@ class ASTBuilder:
             ],
         )
 
-    def _build_body(self, doc: t.Optional[str], body: t.Optional[t.Sequence[ast.stmt]]) -> t.List[ast.stmt]:
-        result: t.List[ast.stmt] = list(body or ())
+    def _build_body(self, doc: t.Optional[str], body: t.Optional[t.Sequence[ast.stmt]]) -> list[ast.stmt]:
+        result: list[ast.stmt] = list(body or ())
         if doc:
             result.insert(0, self.build_docstring(doc))
 
         return result
 
-    def _build_stub_body(self, doc: t.Optional[str]) -> t.List[ast.stmt]:
+    def _build_stub_body(self, doc: t.Optional[str]) -> list[ast.stmt]:
         return (
             [
                 ast.Expr(value=ast.Constant(value=...)),

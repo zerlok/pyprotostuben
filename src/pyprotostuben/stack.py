@@ -19,7 +19,7 @@ class Stack(t.Generic[V_co], t.Sequence[V_co], metaclass=abc.ABCMeta):
 
 class MutableStack(Stack[T]):
     def __init__(self, items: t.Optional[t.Sequence[T]] = None) -> None:
-        self.__impl: t.Deque[T] = deque(items or [])
+        self.__impl = deque[T](items or [])
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.__impl!r})"

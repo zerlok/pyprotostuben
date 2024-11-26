@@ -153,7 +153,7 @@ class Pb2AstBuilder:
         )
 
     def __build_which_oneof_method_stubs(self, scope: ScopeInfo) -> t.Iterable[ast.stmt]:
-        oneofs: t.DefaultDict[str, t.List[ast.expr]] = defaultdict(list)
+        oneofs = defaultdict[str, list[ast.expr]](list)
         for field in scope.fields:
             if field.oneof_group is not None:
                 oneofs[field.oneof_group].append(self.__inner.build_const(field.name))
@@ -429,7 +429,7 @@ class Pb2GrpcAstBuilder:
             doc=info.doc,
         )
 
-    def __build_servicer_method_inout_refs(self, info: MethodInfo) -> t.Tuple[ast.expr, ast.expr]:
+    def __build_servicer_method_inout_refs(self, info: MethodInfo) -> tuple[ast.expr, ast.expr]:
         if not info.server_input_streaming and not info.server_output_streaming:
             return (
                 self.__build_message_ref(info.server_input),
@@ -457,7 +457,7 @@ class Pb2GrpcAstBuilder:
         msg = "invalid method streaming options"
         raise ValueError(msg, info)
 
-    def __build_stub_method_inout_refs(self, info: MethodInfo) -> t.Tuple[ast.expr, ast.expr]:
+    def __build_stub_method_inout_refs(self, info: MethodInfo) -> tuple[ast.expr, ast.expr]:
         if not info.server_input_streaming and not info.server_output_streaming:
             return (
                 self.__build_message_ref(info.server_input),

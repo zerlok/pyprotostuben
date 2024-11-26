@@ -11,7 +11,7 @@ class CustomPluginError(Exception):
 
 class ProtocPluginStub(ProtocPlugin):
     def __init__(self, side_effect: t.Optional[Exception], return_value: t.Optional[CodeGeneratorResponse]) -> None:
-        self.requests: t.List[CodeGeneratorRequest] = []
+        self.requests: list[CodeGeneratorRequest] = []
         self.__side_effect = side_effect
         self.__return_value = return_value
 
