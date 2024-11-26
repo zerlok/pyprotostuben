@@ -1,205 +1,322 @@
+import abc
 import typing as t
 from dataclasses import dataclass
 
-from google.protobuf.descriptor_pb2 import SourceCodeInfo
-
-from pyprotostuben.codegen.module_ast import ModuleASTContext
-from pyprotostuben.codegen.mypy.context import GRPCContext, MessageContext
+from pyprotostuben.codegen.module_ast import ModuleAstContext
+from pyprotostuben.codegen.mypy.builder import Pb2AstBuilder, Pb2GrpcAstBuilder
+from pyprotostuben.codegen.mypy.model import (
+    EnumInfo,
+    EnumValueInfo,
+    ExtensionInfo,
+    FieldInfo,
+    MessageInfo,
+    MethodInfo,
+    ScopeInfo,
+    ServiceInfo,
+)
 from pyprotostuben.logging import LoggerMixin
-from pyprotostuben.protobuf.builder.grpc import MethodInfo
-from pyprotostuben.protobuf.builder.message import FieldInfo
 from pyprotostuben.protobuf.file import ProtoFile
+from pyprotostuben.protobuf.location import build_docstring
 from pyprotostuben.protobuf.registry import MapEntryInfo, TypeRegistry
-from pyprotostuben.protobuf.visitor.decorator import ProtoVisitorDecorator
+from pyprotostuben.protobuf.visitor.abc import ProtoVisitorDecorator
 from pyprotostuben.protobuf.visitor.model import (
     DescriptorContext,
-    EnumDescriptorContext,
-    EnumValueDescriptorContext,
-    FieldDescriptorContext,
-    FileDescriptorContext,
-    MethodDescriptorContext,
-    OneofDescriptorContext,
-    ServiceDescriptorContext,
+    EnumContext,
+    EnumValueContext,
+    ExtensionContext,
+    FieldContext,
+    FileContext,
+    MethodContext,
+    OneofContext,
+    ServiceContext,
 )
-from pyprotostuben.stack import MutableStack
+from pyprotostuben.python.info import ModuleInfo
 
 
 @dataclass()
-class MypyStubContext(ModuleASTContext):
-    messages: MutableStack[MessageContext]
-    grpcs: MutableStack[GRPCContext]
+class MypyStubContext(ModuleAstContext, ScopeInfo):
+    _pb2_module: t.Optional[ModuleInfo] = None
+    _pb2_builder: t.Optional[Pb2AstBuilder] = None
+    _pb2_grpc_module: t.Optional[ModuleInfo] = None
+    _pb2_grpc_builder: t.Optional[Pb2GrpcAstBuilder] = None
+
+    @property
+    def pb2_module(self) -> ModuleInfo:
+        if self._pb2_module is None:
+            raise ValueError
+        return self._pb2_module
+
+    @property
+    def pb2_builder(self) -> Pb2AstBuilder:
+        if self._pb2_builder is None:
+            raise ValueError
+        return self._pb2_builder
+
+    @property
+    def pb2_grpc_module(self) -> ModuleInfo:
+        if self._pb2_grpc_module is None:
+            raise ValueError
+        return self._pb2_grpc_module
+
+    @property
+    def pb2_grpc_builder(self) -> Pb2GrpcAstBuilder:
+        if self._pb2_grpc_builder is None:
+            raise ValueError
+        return self._pb2_grpc_builder
 
 
-class MypyStubASTGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
-    def __init__(
-        self,
-        registry: TypeRegistry,
-        message_context_factory: t.Callable[[ProtoFile], MessageContext],
-        grpc_context_factory: t.Callable[[ProtoFile], GRPCContext],
-    ) -> None:
+class MypyStubTrait(metaclass=abc.ABCMeta):
+    @abc.abstractmethod
+    def create_pb2_module(self, file: ProtoFile) -> ModuleInfo:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def create_pb2_builder(self, module: ModuleInfo) -> Pb2AstBuilder:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def create_pb2_grpc_module(self, file: ProtoFile) -> ModuleInfo:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def create_pb2_grpc_builder(self, module: ModuleInfo) -> Pb2GrpcAstBuilder:
+        raise NotImplementedError
+
+
+class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
+    def __init__(self, registry: TypeRegistry, trait: MypyStubTrait) -> None:
         self.__registry = registry
-        self.__message_context_factory = message_context_factory
-        self.__grpc_context_factory = grpc_context_factory
+        self.__trait = trait
 
-    def enter_file_descriptor_proto(self, context: FileDescriptorContext[MypyStubContext]) -> None:
-        context.meta.messages.put(self.__message_context_factory(context.file))
-        context.meta.grpcs.put(self.__grpc_context_factory(context.file))
+    def enter_file(self, context: FileContext[MypyStubContext]) -> None:
+        context.meta = self.__create_root_context(context)
 
-    def leave_file_descriptor_proto(self, context: FileDescriptorContext[MypyStubContext]) -> None:
-        message = context.meta.messages.pop()
-        grpc = context.meta.grpcs.pop()
+    def leave_file(self, context: FileContext[MypyStubContext]) -> None:
+        scope = context.meta
 
-        context.meta.modules.update(
+        pb2_module_ast = scope.pb2_builder.build_module(scope)
+        pb2_grpc_module_ast = scope.pb2_grpc_builder.build_module(scope)
+
+        context.meta.generated_modules.update(
             {
-                message.module.stub_file: message.builder.build_protobuf_message_module(
-                    deps=message.external_modules,
-                    body=message.nested,
-                ),
-                grpc.module.stub_file: grpc.builder.build_grpc_module(
-                    deps=grpc.external_modules,
-                    body=grpc.nested,
-                ),
+                scope.pb2_module.stub_file: pb2_module_ast,
+                scope.pb2_grpc_module.stub_file: pb2_grpc_module_ast,
             }
         )
 
-    def enter_enum_descriptor_proto(self, context: EnumDescriptorContext[MypyStubContext]) -> None:
-        parent = context.meta.messages.get_last()
+    def enter_enum(self, context: EnumContext[MypyStubContext]) -> None:
+        context.meta = self.__create_sub_context(context)
 
-        context.meta.messages.put(parent.sub())
+    def leave_enum(self, context: EnumContext[MypyStubContext]) -> None:
+        scope = context.meta
+        parent = context.parent.meta
+        builder = scope.pb2_builder
 
-    def leave_enum_descriptor_proto(self, context: EnumDescriptorContext[MypyStubContext]) -> None:
-        message = context.meta.messages.pop()
-        parent = context.meta.messages.get_last()
-        builder = message.builder
-
-        parent.nested.append(
-            builder.build_protobuf_enum_def(
-                name=context.item.name,
-                doc=self.__get_doc(context.location),
-                nested=message.nested,
-            )
+        parent.enums.append(
+            EnumInfo(
+                body=[
+                    builder.build_enum_def(
+                        path=self.__get_class_path(context),
+                        doc=build_docstring(context.location),
+                        scope=scope,
+                    )
+                ],
+            ),
         )
 
-    def enter_enum_value_descriptor_proto(self, _: EnumValueDescriptorContext[MypyStubContext]) -> None:
+    def enter_enum_value(self, _: EnumValueContext[MypyStubContext]) -> None:
         pass
 
-    def leave_enum_value_descriptor_proto(self, context: EnumValueDescriptorContext[MypyStubContext]) -> None:
-        parent = context.meta.messages.get_last()
-        builder = parent.builder
+    def leave_enum_value(self, context: EnumValueContext[MypyStubContext]) -> None:
+        proto = context.proto
+        parent = context.meta
+        builder = parent.pb2_builder
 
-        parent.nested.extend(
-            builder.build_protobuf_enum_value_def(
-                name=context.item.name,
-                doc=self.__get_doc(context.location),
-                value=context.item.number,
-            )
+        parent.enum_values.append(
+            EnumValueInfo(
+                name=proto.name,
+                value=proto.number,
+                body=builder.build_enum_value_def(
+                    name=proto.name,
+                    doc=build_docstring(context.location),
+                    value=proto.number,
+                ),
+            ),
         )
 
-    def enter_descriptor_proto(self, context: DescriptorContext[MypyStubContext]) -> None:
-        parent = context.meta.messages.get_last()
+    def enter_descriptor(self, context: DescriptorContext[MypyStubContext]) -> None:
+        context.meta = self.__create_sub_context(context)
 
-        context.meta.messages.put(parent.sub())
-
-    def leave_descriptor_proto(self, context: DescriptorContext[MypyStubContext]) -> None:
-        message = context.meta.messages.pop()
-
-        if context.item.options.map_entry:
+    def leave_descriptor(self, context: DescriptorContext[MypyStubContext]) -> None:
+        proto = context.proto
+        if proto.options.map_entry:
             return
 
-        parent = context.meta.messages.get_last()
-        builder = message.builder
+        scope = context.meta
+        parent = context.parent.meta
+        builder = scope.pb2_builder
 
-        parent.nested.append(
-            builder.build_protobuf_message_def(
-                name=context.item.name,
-                doc=self.__get_doc(context.location),
-                nested=message.nested,
-                fields=message.fields,
-            ),
+        parent.messages.append(
+            MessageInfo(
+                body=[
+                    builder.build_message_def(
+                        path=self.__get_class_path(context),
+                        doc=build_docstring(context.location),
+                        scope=scope,
+                    ),
+                ],
+            )
         )
 
-    def enter_oneof_descriptor_proto(self, _: OneofDescriptorContext[MypyStubContext]) -> None:
+    def enter_oneof(self, _: OneofContext[MypyStubContext]) -> None:
         pass
 
-    def leave_oneof_descriptor_proto(self, context: OneofDescriptorContext[MypyStubContext]) -> None:
-        info = context.meta.messages.get_last()
-        info.oneof_groups.append(context.item.name)
+    def leave_oneof(self, context: OneofContext[MypyStubContext]) -> None:
+        proto = context.proto
+        parent = context.meta
 
-    def enter_field_descriptor_proto(self, _: FieldDescriptorContext[MypyStubContext]) -> None:
+        parent.oneof_groups.append(proto.name)
+
+    def enter_field(self, _: FieldContext[MypyStubContext]) -> None:
         pass
 
-    def leave_field_descriptor_proto(self, context: FieldDescriptorContext[MypyStubContext]) -> None:
-        is_optional = context.item.proto3_optional
-        message = context.meta.messages.get_last()
-        builder = message.builder
+    def leave_field(self, context: FieldContext[MypyStubContext]) -> None:
+        proto = context.proto
+        parent = context.meta
+        builder = context.meta.pb2_builder
 
-        info = self.__registry.resolve_proto_field(context.item)
+        info = self.__registry.resolve_proto_field(proto)
+        is_optional = proto.proto3_optional
 
-        annotation = builder.build_protobuf_type_ref(info)
-        if not isinstance(info, MapEntryInfo) and context.item.label == context.item.Label.LABEL_REPEATED:
-            annotation = builder.build_protobuf_repeated_ref(annotation)
+        annotation = builder.build_type_ref(info)
+        if not isinstance(info, MapEntryInfo) and proto.label == proto.Label.LABEL_REPEATED:
+            annotation = builder.build_repeated_ref(annotation)
 
-        message.fields.append(
+        parent.fields.append(
             FieldInfo(
-                name=context.item.name,
+                name=proto.name,
                 annotation=annotation,
-                doc=self.__get_doc(context.location),
+                doc=build_docstring(context.location),
                 optional=is_optional,
-                default=None,
                 # TODO: support proto.default_value
-                oneof_group=message.oneof_groups[context.item.oneof_index]
-                if not is_optional and context.item.HasField("oneof_index")
+                default=None,
+                oneof_group=parent.oneof_groups[proto.oneof_index]
+                if not is_optional and proto.HasField("oneof_index")
                 else None,
-            ),
+            )
         )
 
-    def enter_service_descriptor_proto(self, context: ServiceDescriptorContext[MypyStubContext]) -> None:
-        parent = context.meta.grpcs.get_last()
+    def enter_service(self, context: ServiceContext[MypyStubContext]) -> None:
+        context.meta = self.__create_sub_context(context)
 
-        context.meta.grpcs.put(parent.sub())
+    def leave_service(self, context: ServiceContext[MypyStubContext]) -> None:
+        name = context.proto.name
+        scope = context.meta
+        parent = context.parent.meta
+        builder = scope.pb2_grpc_builder
 
-    def leave_service_descriptor_proto(self, context: ServiceDescriptorContext[MypyStubContext]) -> None:
-        grpc = context.meta.grpcs.pop()
-        parent = context.meta.grpcs.get_last()
-        builder = grpc.builder
+        doc = build_docstring(context.location)
 
-        doc = self.__get_doc(context.location)
-        parent.nested.extend(builder.build_grpc_servicer_defs(f"{context.item.name}Servicer", doc, grpc.methods))
-        parent.nested.extend(builder.build_grpc_stub_defs(f"{context.item.name}Stub", doc, grpc.methods))
+        parent.services.append(
+            ServiceInfo(
+                name=name,
+                servicer=builder.build_servicer_def(name, doc, scope),
+                registrator=builder.build_servicer_registrator_def(name),
+                stub=builder.build_stub_def(name, doc, scope),
+            )
+        )
 
-    def enter_method_descriptor_proto(self, context: MethodDescriptorContext[MypyStubContext]) -> None:
+    def enter_method(self, context: MethodContext[MypyStubContext]) -> None:
         pass
 
-    def leave_method_descriptor_proto(self, context: MethodDescriptorContext[MypyStubContext]) -> None:
-        grpc = context.meta.grpcs.get_last()
-        builder = grpc.builder
+    def leave_method(self, context: MethodContext[MypyStubContext]) -> None:
+        proto = context.proto
+        parent = context.meta
 
-        grpc.methods.append(
+        parent.methods.append(
             MethodInfo(
-                name=context.item.name,
-                doc=self.__get_doc(context.location),
-                client_input=builder.build_grpc_message_ref(
-                    self.__registry.resolve_proto_method_client_input(context.item)
-                ),
-                client_streaming=context.item.client_streaming,
-                server_output=builder.build_grpc_message_ref(
-                    self.__registry.resolve_proto_method_server_output(context.item)
-                ),
-                server_streaming=context.item.server_streaming,
+                name=proto.name,
+                doc=build_docstring(context.location),
+                server_input=self.__registry.resolve_proto_method_client_input(proto),
+                server_input_streaming=proto.client_streaming,
+                server_output=self.__registry.resolve_proto_method_server_output(proto),
+                server_output_streaming=proto.server_streaming,
             ),
         )
 
-    def __get_doc(self, location: t.Optional[SourceCodeInfo.Location]) -> t.Optional[str]:
-        if location is None:
-            return None
+    def enter_extension(self, context: ExtensionContext[MypyStubContext]) -> None:
+        pass
 
-        blocks: t.List[str] = []
-        blocks.extend(comment.strip() for comment in location.leading_detached_comments)
+    def leave_extension(self, context: ExtensionContext[MypyStubContext]) -> None:
+        proto = context.proto
+        parent = context.meta
+        builder = context.meta.pb2_builder
 
-        if location.HasField("leading_comments"):
-            blocks.append(location.leading_comments.strip())
+        if not proto.HasField("extendee"):
+            return
 
-        if location.HasField("trailing_comments"):
-            blocks.append(location.trailing_comments.strip())
+        info = self.__registry.resolve_proto_field(proto)
 
-        return "\n\n".join(blocks)
+        annotation = builder.build_type_ref(info)
+        if not isinstance(info, MapEntryInfo) and proto.label == proto.Label.LABEL_REPEATED:
+            annotation = builder.build_repeated_ref(annotation)
+
+        parent.extensions.append(
+            ExtensionInfo(
+                name=proto.name,
+                annotation=annotation,
+                doc=build_docstring(context.location),
+                # TODO: support proto.default_value
+                default=None,
+                extended=self.__registry.resolve_proto_message(proto.extendee),
+            )
+        )
+
+    def __create_root_context(self, context: FileContext[MypyStubContext]) -> MypyStubContext:
+        pb2_module = self.__trait.create_pb2_module(context.file)
+        pb2_grpc_module = self.__trait.create_pb2_grpc_module(context.file)
+
+        return MypyStubContext(
+            generated_modules=context.meta.generated_modules,
+            _pb2_module=pb2_module,
+            _pb2_builder=self.__trait.create_pb2_builder(pb2_module),
+            _pb2_grpc_module=pb2_grpc_module,
+            _pb2_grpc_builder=self.__trait.create_pb2_grpc_builder(pb2_grpc_module),
+            enums=[],
+            enum_values=[],
+            messages=[],
+            oneof_groups=[],
+            fields=[],
+            services=[],
+            methods=[],
+        )
+
+    def __create_sub_context(
+        self,
+        context: t.Union[
+            EnumContext[MypyStubContext],
+            DescriptorContext[MypyStubContext],
+            ServiceContext[MypyStubContext],
+        ],
+    ) -> MypyStubContext:
+        return MypyStubContext(
+            generated_modules=context.meta.generated_modules,
+            _pb2_module=context.meta.pb2_module,
+            _pb2_builder=context.meta.pb2_builder,
+            _pb2_grpc_module=context.meta.pb2_grpc_module,
+            _pb2_grpc_builder=context.meta.pb2_grpc_builder,
+            enums=[],
+            enum_values=[],
+            messages=[],
+            oneof_groups=[],
+            fields=[],
+            services=[],
+            methods=[],
+        )
+
+    def __get_class_path(
+        self,
+        context: t.Union[EnumContext[MypyStubContext], DescriptorContext[MypyStubContext]],
+    ) -> t.Sequence[str]:
+        # skip first part (root = file descriptor)
+        return [part.proto.name for part in context.parts[1:]]

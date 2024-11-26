@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pyprotostuben"
-version = "0.3.0"
+version = "0.3.1"
 description = "Generate Python MyPy stub modules from protobuf files."
 authors = ["zerlok <danil.troshnev@gmail.com>"]
 readme = "README.md"
@@ -19,6 +19,10 @@ classifiers = [
     "Typing :: Typed",
 ]
 
+[tool.poetry.urls]
+Homepage = "https://github.com/zerlok/pyprotostuben"
+Issues = "https://github.com/zerlok/pyprotostuben/issues"
+
 [tool.poetry.scripts]
 protoc-gen-mypy-stub = "pyprotostuben.protoc:gen_mypy_stub"
 protoc-gen-brokrpc = "pyprotostuben.protoc:gen_brokrpc"
@@ -36,7 +40,7 @@ pytest-cov = "^6.0.0"
 pytest-mypy-plugins = "^3.1.2"
 ruff = "^0.7.4"
 grpc-stubs = "^1.53.0.5"
-BrokRPC = { version = "^0.1.0", python = ">=3.12,<4.0" }
+BrokRPC = { version = "^0.2.0", python = ">=3.12,<4.0" }
 
 
 [build-system]

@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package bar;
+
+import "google/protobuf/descriptor.proto";
+import "google/protobuf/empty.proto";
+import "foo.proto";
+
+service BarService {
+  option (foo.foo_service_option).field1 = 181;
+
+  rpc DoBar(google.protobuf.Empty) returns (google.protobuf.Empty) {
+    option (foo.foo_method_option) = {
+      field2: "field2-value"
+    };
+  }
+}

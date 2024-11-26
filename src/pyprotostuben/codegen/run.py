@@ -14,8 +14,7 @@ def run_codegen(
 ) -> None:
     log = Logger.get(__name__)
 
-    request = CodeGeneratorRequest()
-    request.ParseFromString(input_.read())
+    request = CodeGeneratorRequest.FromString(input_.read())
 
     log.debug("started", gen=gen)
     try:

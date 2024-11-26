@@ -16,7 +16,7 @@ class GreeterService(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
 def add_greeter_service_to_server(service: GreeterService, server: brokrpc.rpc.server.Server) -> None:
-    server.register_unary_unary_handler(func=service.greet, routing_key='/greeting/Greeter/greet', serializer=brokrpc.serializer.protobuf.RPCProtobufSerializer(greeting_pb2.GreetRequest, greeting_pb2.GreetResponse))
+    server.register_unary_unary_handler(func=service.greet, routing_key='/greeting/Greeter/Greet', serializer=brokrpc.serializer.protobuf.RPCProtobufSerializer(greeting_pb2.GreetRequest, greeting_pb2.GreetResponse))
 
 class GreeterClient:
 
@@ -28,5 +28,5 @@ class GreeterClient:
 
 @contextlib.asynccontextmanager
 async def create_client(client: brokrpc.rpc.client.Client) -> typing.AsyncIterator[GreeterClient]:
-    async with client.unary_unary_caller(routing_key='/greeting/Greeter/greet', serializer=brokrpc.serializer.protobuf.RPCProtobufSerializer(greeting_pb2.GreetRequest, greeting_pb2.GreetResponse)) as greet:
+    async with client.unary_unary_caller(routing_key='/greeting/Greeter/Greet', serializer=brokrpc.serializer.protobuf.RPCProtobufSerializer(greeting_pb2.GreetRequest, greeting_pb2.GreetResponse)) as greet:
         yield GreeterClient(greet=greet)

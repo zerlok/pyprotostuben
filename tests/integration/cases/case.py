@@ -29,6 +29,7 @@ class DirCaseProvider(CaseProvider):
     # NOTE: case provider constructor has many settings, no need to add extra class.
     def __init__(  # noqa: PLR0913
         self,
+        *,
         filename: str,
         plugin: ProtocPlugin,
         parameter: t.Optional[str] = None,
@@ -55,7 +56,7 @@ class DirCaseProvider(CaseProvider):
         self.__expected_gen_paths = (
             [self.__expected_gen_source / path for path in expected_gen_paths]
             if expected_gen_paths is not None
-            else list(self.__expected_gen_source.iterdir())
+            else [path for path in self.__expected_gen_source.iterdir() if path.name != "__init__.py"]
         )
 
     def provide(self, tmp_path: Path) -> Case:
