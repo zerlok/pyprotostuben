@@ -8,17 +8,18 @@ from pyprotostuben.codegen.module_ast import ModuleAstContext
 from pyprotostuben.logging import LoggerMixin
 from pyprotostuben.protobuf.location import build_docstring
 from pyprotostuben.protobuf.registry import TypeRegistry
-from pyprotostuben.protobuf.visitor.decorator import ProtoVisitorDecorator, T_contra
+from pyprotostuben.protobuf.visitor.abc import ProtoVisitorDecorator
+from pyprotostuben.protobuf.visitor.decorator import T_contra
 from pyprotostuben.protobuf.visitor.model import (
     DescriptorContext,
-    EnumDescriptorContext,
-    EnumValueDescriptorContext,
-    ExtensionDescriptorContext,
-    FieldDescriptorContext,
-    FileDescriptorContext,
-    MethodDescriptorContext,
-    OneofDescriptorContext,
-    ServiceDescriptorContext,
+    EnumContext,
+    EnumValueContext,
+    ExtensionContext,
+    FieldContext,
+    FileContext,
+    MethodContext,
+    OneofContext,
+    ServiceContext,
 )
 from pyprotostuben.python.ast_builder import ASTBuilder, ModuleDependencyResolver, TypeRef
 from pyprotostuben.python.info import ModuleInfo, PackageInfo, TypeInfo
@@ -68,10 +69,10 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
     def __init__(self, registry: TypeRegistry) -> None:
         self.__registry = registry
 
-    def enter_file_descriptor_proto(self, context: FileDescriptorContext[BrokRPCContext]) -> None:
+    def enter_file(self, context: FileContext[BrokRPCContext]) -> None:
         context.meta = self.__create_root_context(context)
 
-    def leave_file_descriptor_proto(self, context: FileDescriptorContext[BrokRPCContext]) -> None:
+    def leave_file(self, context: FileContext[BrokRPCContext]) -> None:
         scope = context.meta
 
         if scope.services:
@@ -94,40 +95,40 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
                 }
             )
 
-    def enter_enum_descriptor_proto(self, context: EnumDescriptorContext[BrokRPCContext]) -> None:
+    def enter_enum(self, context: EnumContext[BrokRPCContext]) -> None:
         pass
 
-    def leave_enum_descriptor_proto(self, context: EnumDescriptorContext[BrokRPCContext]) -> None:
+    def leave_enum(self, context: EnumContext[BrokRPCContext]) -> None:
         pass
 
-    def enter_enum_value_descriptor_proto(self, context: EnumValueDescriptorContext[BrokRPCContext]) -> None:
+    def enter_enum_value(self, context: EnumValueContext[BrokRPCContext]) -> None:
         pass
 
-    def leave_enum_value_descriptor_proto(self, context: EnumValueDescriptorContext[BrokRPCContext]) -> None:
+    def leave_enum_value(self, context: EnumValueContext[BrokRPCContext]) -> None:
         pass
 
-    def enter_descriptor_proto(self, context: DescriptorContext[BrokRPCContext]) -> None:
+    def enter_descriptor(self, context: DescriptorContext[BrokRPCContext]) -> None:
         pass
 
-    def leave_descriptor_proto(self, context: DescriptorContext[BrokRPCContext]) -> None:
+    def leave_descriptor(self, context: DescriptorContext[BrokRPCContext]) -> None:
         pass
 
-    def enter_oneof_descriptor_proto(self, context: OneofDescriptorContext[BrokRPCContext]) -> None:
+    def enter_oneof(self, context: OneofContext[BrokRPCContext]) -> None:
         pass
 
-    def leave_oneof_descriptor_proto(self, context: OneofDescriptorContext[BrokRPCContext]) -> None:
+    def leave_oneof(self, context: OneofContext[BrokRPCContext]) -> None:
         pass
 
-    def enter_field_descriptor_proto(self, context: FieldDescriptorContext[BrokRPCContext]) -> None:
+    def enter_field(self, context: FieldContext[BrokRPCContext]) -> None:
         pass
 
-    def leave_field_descriptor_proto(self, context: FieldDescriptorContext[BrokRPCContext]) -> None:
+    def leave_field(self, context: FieldContext[BrokRPCContext]) -> None:
         pass
 
-    def enter_service_descriptor_proto(self, context: ServiceDescriptorContext[BrokRPCContext]) -> None:
+    def enter_service(self, context: ServiceContext[BrokRPCContext]) -> None:
         context.meta = self.__create_sub_context(context.meta)
 
-    def leave_service_descriptor_proto(self, context: ServiceDescriptorContext[BrokRPCContext]) -> None:
+    def leave_service(self, context: ServiceContext[BrokRPCContext]) -> None:
         proto = context.proto
         scope = context.meta
         parent = context.parent.meta
@@ -144,10 +145,10 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
             ),
         )
 
-    def enter_method_descriptor_proto(self, context: MethodDescriptorContext[BrokRPCContext]) -> None:
+    def enter_method(self, context: MethodContext[BrokRPCContext]) -> None:
         pass
 
-    def leave_method_descriptor_proto(self, context: MethodDescriptorContext[BrokRPCContext]) -> None:
+    def leave_method(self, context: MethodContext[BrokRPCContext]) -> None:
         proto = context.proto
         parent = context.meta
 
@@ -163,13 +164,13 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
             )
         )
 
-    def enter_extension_descriptor_proto(self, context: ExtensionDescriptorContext[T_contra]) -> None:
+    def enter_extension(self, context: ExtensionContext[T_contra]) -> None:
         pass
 
-    def leave_extension_descriptor_proto(self, context: ExtensionDescriptorContext[T_contra]) -> None:
+    def leave_extension(self, context: ExtensionContext[T_contra]) -> None:
         pass
 
-    def __create_root_context(self, context: FileDescriptorContext[BrokRPCContext]) -> BrokRPCContext:
+    def __create_root_context(self, context: FileContext[BrokRPCContext]) -> BrokRPCContext:
         file = context.file
         module = ModuleInfo(file.pb2_package, f"{file.name}_brokrpc")
 
@@ -188,7 +189,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
 
     def __build_service_def(
         self,
-        context: ServiceDescriptorContext[BrokRPCContext],
+        context: ServiceContext[BrokRPCContext],
         name: str,
         methods: t.Sequence[MethodInfo],
     ) -> ast.stmt:
@@ -216,7 +217,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
 
     def __build_service_registrator_def(
         self,
-        context: ServiceDescriptorContext[BrokRPCContext],
+        context: ServiceContext[BrokRPCContext],
         name: str,
         methods: t.Sequence[MethodInfo],
     ) -> ast.stmt:
@@ -250,7 +251,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
 
     def __build_client_def(
         self,
-        context: ServiceDescriptorContext[BrokRPCContext],
+        context: ServiceContext[BrokRPCContext],
         name: str,
         methods: t.Sequence[MethodInfo],
     ) -> ast.stmt:
@@ -313,7 +314,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
 
     def __build_client_factory_def(
         self,
-        context: ServiceDescriptorContext[BrokRPCContext],
+        context: ServiceContext[BrokRPCContext],
         name: str,
         methods: t.Sequence[MethodInfo],
     ) -> ast.stmt:
@@ -354,7 +355,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
 
     def __build_client_caller_factory(
         self,
-        context: ServiceDescriptorContext[BrokRPCContext],
+        context: ServiceContext[BrokRPCContext],
         method: MethodInfo,
     ) -> ast.expr:
         builder = context.meta.builder

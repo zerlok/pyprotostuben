@@ -17,14 +17,14 @@ from pyprotostuben.protobuf.visitor.abc import ProtoVisitor
 from pyprotostuben.protobuf.visitor.decorator import LeaveProtoVisitorDecorator
 from pyprotostuben.protobuf.visitor.model import (
     DescriptorContext,
-    EnumDescriptorContext,
-    EnumValueDescriptorContext,
-    ExtensionDescriptorContext,
-    FieldDescriptorContext,
-    FileDescriptorContext,
-    MethodDescriptorContext,
-    OneofDescriptorContext,
-    ServiceDescriptorContext,
+    EnumContext,
+    EnumValueContext,
+    ExtensionContext,
+    FieldContext,
+    FileContext,
+    MethodContext,
+    OneofContext,
+    ServiceContext,
 )
 from pyprotostuben.protobuf.visitor.walker import Walker
 from pyprotostuben.python.info import ModuleInfo
@@ -46,17 +46,17 @@ class BuildContext:
 
 
 class ContextBuilder(ProtoVisitor[BuildContext], LoggerMixin):
-    def visit_file_descriptor_proto(self, context: FileDescriptorContext[BuildContext]) -> None:
+    def visit_file(self, context: FileContext[BuildContext]) -> None:
         self.__register_file(context)
         self._log.debug("visited", file=context.file)
 
-    def visit_enum_descriptor_proto(self, context: EnumDescriptorContext[BuildContext]) -> None:
+    def visit_enum(self, context: EnumContext[BuildContext]) -> None:
         self.__register_enum(context)
 
-    def visit_enum_value_descriptor_proto(self, _: EnumValueDescriptorContext[BuildContext]) -> None:
+    def visit_enum_value(self, _: EnumValueContext[BuildContext]) -> None:
         pass
 
-    def visit_descriptor_proto(self, context: DescriptorContext[BuildContext]) -> None:
+    def visit_descriptor(self, context: DescriptorContext[BuildContext]) -> None:
         proto = context.proto
 
         if proto.options.map_entry:
@@ -69,19 +69,19 @@ class ContextBuilder(ProtoVisitor[BuildContext], LoggerMixin):
         else:
             self.__register_message(context)
 
-    def visit_oneof_descriptor_proto(self, _: OneofDescriptorContext[BuildContext]) -> None:
+    def visit_oneof(self, _: OneofContext[BuildContext]) -> None:
         pass
 
-    def visit_field_descriptor_proto(self, _: FieldDescriptorContext[BuildContext]) -> None:
+    def visit_field(self, _: FieldContext[BuildContext]) -> None:
         pass
 
-    def visit_service_descriptor_proto(self, _: ServiceDescriptorContext[BuildContext]) -> None:
+    def visit_service(self, _: ServiceContext[BuildContext]) -> None:
         pass
 
-    def visit_method_descriptor_proto(self, _: MethodDescriptorContext[BuildContext]) -> None:
+    def visit_method(self, _: MethodContext[BuildContext]) -> None:
         pass
 
-    def visit_extension_descriptor_proto(self, context: ExtensionDescriptorContext[BuildContext]) -> None:
+    def visit_extension(self, context: ExtensionContext[BuildContext]) -> None:
         pass
 
     # TODO: speed up with multiprocessing by files
@@ -101,10 +101,10 @@ class ContextBuilder(ProtoVisitor[BuildContext], LoggerMixin):
             registry=TypeRegistry(context.types, context.map_entries),
         )
 
-    def __register_file(self, context: FileDescriptorContext[BuildContext]) -> None:
+    def __register_file(self, context: FileContext[BuildContext]) -> None:
         context.meta.files[context.proto.name] = context.file
 
-    def __register_enum(self, context: EnumDescriptorContext[BuildContext]) -> None:
+    def __register_enum(self, context: EnumContext[BuildContext]) -> None:
         qualname, module, ns = self.__build_type(context.root, context)
         type_ = context.meta.types[qualname] = EnumInfo(module, ns)
 
@@ -112,7 +112,7 @@ class ContextBuilder(ProtoVisitor[BuildContext], LoggerMixin):
 
     def __register_message(
         self,
-        context: t.Union[FileDescriptorContext[BuildContext], DescriptorContext[BuildContext]],
+        context: t.Union[FileContext[BuildContext], DescriptorContext[BuildContext]],
     ) -> None:
         qualname, module, ns = self.__build_type(
             root=context.root if isinstance(context, DescriptorContext) else context,
@@ -135,10 +135,10 @@ class ContextBuilder(ProtoVisitor[BuildContext], LoggerMixin):
 
     def __build_type(
         self,
-        root: FileDescriptorContext[BuildContext],
+        root: FileContext[BuildContext],
         context: t.Union[
-            FileDescriptorContext[BuildContext],
-            EnumDescriptorContext[BuildContext],
+            FileContext[BuildContext],
+            EnumContext[BuildContext],
             DescriptorContext[BuildContext],
         ],
     ) -> t.Tuple[str, ModuleInfo, t.Sequence[str]]:

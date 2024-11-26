@@ -9,7 +9,7 @@ from google.protobuf.descriptor_pb2 import GeneratedCodeInfo
 from pyprotostuben.codegen.abc import ProtoFileGenerator
 from pyprotostuben.logging import LoggerMixin
 from pyprotostuben.protobuf.file import ProtoFile
-from pyprotostuben.protobuf.visitor.decorator import ProtoVisitorDecorator
+from pyprotostuben.protobuf.visitor.abc import ProtoVisitorDecorator
 from pyprotostuben.protobuf.visitor.walker import Walker
 
 

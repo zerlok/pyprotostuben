@@ -18,17 +18,17 @@ from pyprotostuben.logging import LoggerMixin
 from pyprotostuben.protobuf.file import ProtoFile
 from pyprotostuben.protobuf.location import build_docstring
 from pyprotostuben.protobuf.registry import MapEntryInfo, TypeRegistry
-from pyprotostuben.protobuf.visitor.decorator import ProtoVisitorDecorator
+from pyprotostuben.protobuf.visitor.abc import ProtoVisitorDecorator
 from pyprotostuben.protobuf.visitor.model import (
     DescriptorContext,
-    EnumDescriptorContext,
-    EnumValueDescriptorContext,
-    ExtensionDescriptorContext,
-    FieldDescriptorContext,
-    FileDescriptorContext,
-    MethodDescriptorContext,
-    OneofDescriptorContext,
-    ServiceDescriptorContext,
+    EnumContext,
+    EnumValueContext,
+    ExtensionContext,
+    FieldContext,
+    FileContext,
+    MethodContext,
+    OneofContext,
+    ServiceContext,
 )
 from pyprotostuben.python.info import ModuleInfo
 
@@ -83,16 +83,15 @@ class MypyStubTrait(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
 
-# TODO: consider use of inline type dicts, see: https://mypy.readthedocs.io/en/stable/typed_dict.html#inline-typeddict-types
 class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
     def __init__(self, registry: TypeRegistry, trait: MypyStubTrait) -> None:
         self.__registry = registry
         self.__trait = trait
 
-    def enter_file_descriptor_proto(self, context: FileDescriptorContext[MypyStubContext]) -> None:
+    def enter_file(self, context: FileContext[MypyStubContext]) -> None:
         context.meta = self.__create_root_context(context)
 
-    def leave_file_descriptor_proto(self, context: FileDescriptorContext[MypyStubContext]) -> None:
+    def leave_file(self, context: FileContext[MypyStubContext]) -> None:
         scope = context.meta
 
         pb2_module_ast = scope.pb2_builder.build_module(scope)
@@ -105,10 +104,10 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
             }
         )
 
-    def enter_enum_descriptor_proto(self, context: EnumDescriptorContext[MypyStubContext]) -> None:
+    def enter_enum(self, context: EnumContext[MypyStubContext]) -> None:
         context.meta = self.__create_sub_context(context)
 
-    def leave_enum_descriptor_proto(self, context: EnumDescriptorContext[MypyStubContext]) -> None:
+    def leave_enum(self, context: EnumContext[MypyStubContext]) -> None:
         scope = context.meta
         parent = context.parent.meta
         builder = scope.pb2_builder
@@ -125,10 +124,10 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
             ),
         )
 
-    def enter_enum_value_descriptor_proto(self, _: EnumValueDescriptorContext[MypyStubContext]) -> None:
+    def enter_enum_value(self, _: EnumValueContext[MypyStubContext]) -> None:
         pass
 
-    def leave_enum_value_descriptor_proto(self, context: EnumValueDescriptorContext[MypyStubContext]) -> None:
+    def leave_enum_value(self, context: EnumValueContext[MypyStubContext]) -> None:
         proto = context.proto
         parent = context.meta
         builder = parent.pb2_builder
@@ -145,10 +144,10 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
             ),
         )
 
-    def enter_descriptor_proto(self, context: DescriptorContext[MypyStubContext]) -> None:
+    def enter_descriptor(self, context: DescriptorContext[MypyStubContext]) -> None:
         context.meta = self.__create_sub_context(context)
 
-    def leave_descriptor_proto(self, context: DescriptorContext[MypyStubContext]) -> None:
+    def leave_descriptor(self, context: DescriptorContext[MypyStubContext]) -> None:
         proto = context.proto
         if proto.options.map_entry:
             return
@@ -169,19 +168,19 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
             )
         )
 
-    def enter_oneof_descriptor_proto(self, _: OneofDescriptorContext[MypyStubContext]) -> None:
+    def enter_oneof(self, _: OneofContext[MypyStubContext]) -> None:
         pass
 
-    def leave_oneof_descriptor_proto(self, context: OneofDescriptorContext[MypyStubContext]) -> None:
+    def leave_oneof(self, context: OneofContext[MypyStubContext]) -> None:
         proto = context.proto
         parent = context.meta
 
         parent.oneof_groups.append(proto.name)
 
-    def enter_field_descriptor_proto(self, _: FieldDescriptorContext[MypyStubContext]) -> None:
+    def enter_field(self, _: FieldContext[MypyStubContext]) -> None:
         pass
 
-    def leave_field_descriptor_proto(self, context: FieldDescriptorContext[MypyStubContext]) -> None:
+    def leave_field(self, context: FieldContext[MypyStubContext]) -> None:
         proto = context.proto
         parent = context.meta
         builder = context.meta.pb2_builder
@@ -207,10 +206,10 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
             )
         )
 
-    def enter_service_descriptor_proto(self, context: ServiceDescriptorContext[MypyStubContext]) -> None:
+    def enter_service(self, context: ServiceContext[MypyStubContext]) -> None:
         context.meta = self.__create_sub_context(context)
 
-    def leave_service_descriptor_proto(self, context: ServiceDescriptorContext[MypyStubContext]) -> None:
+    def leave_service(self, context: ServiceContext[MypyStubContext]) -> None:
         name = context.proto.name
         scope = context.meta
         parent = context.parent.meta
@@ -227,10 +226,10 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
             )
         )
 
-    def enter_method_descriptor_proto(self, context: MethodDescriptorContext[MypyStubContext]) -> None:
+    def enter_method(self, context: MethodContext[MypyStubContext]) -> None:
         pass
 
-    def leave_method_descriptor_proto(self, context: MethodDescriptorContext[MypyStubContext]) -> None:
+    def leave_method(self, context: MethodContext[MypyStubContext]) -> None:
         proto = context.proto
         parent = context.meta
 
@@ -245,10 +244,10 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
             ),
         )
 
-    def enter_extension_descriptor_proto(self, context: ExtensionDescriptorContext[MypyStubContext]) -> None:
+    def enter_extension(self, context: ExtensionContext[MypyStubContext]) -> None:
         pass
 
-    def leave_extension_descriptor_proto(self, context: ExtensionDescriptorContext[MypyStubContext]) -> None:
+    def leave_extension(self, context: ExtensionContext[MypyStubContext]) -> None:
         proto = context.proto
         parent = context.meta
         builder = context.meta.pb2_builder
@@ -273,7 +272,7 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
             )
         )
 
-    def __create_root_context(self, context: FileDescriptorContext[MypyStubContext]) -> MypyStubContext:
+    def __create_root_context(self, context: FileContext[MypyStubContext]) -> MypyStubContext:
         pb2_module = self.__trait.create_pb2_module(context.file)
         pb2_grpc_module = self.__trait.create_pb2_grpc_module(context.file)
 
@@ -295,9 +294,9 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
     def __create_sub_context(
         self,
         context: t.Union[
-            EnumDescriptorContext[MypyStubContext],
+            EnumContext[MypyStubContext],
             DescriptorContext[MypyStubContext],
-            ServiceDescriptorContext[MypyStubContext],
+            ServiceContext[MypyStubContext],
         ],
     ) -> MypyStubContext:
         return MypyStubContext(
@@ -317,7 +316,7 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
 
     def __get_class_path(
         self,
-        context: t.Union[EnumDescriptorContext[MypyStubContext], DescriptorContext[MypyStubContext]],
+        context: t.Union[EnumContext[MypyStubContext], DescriptorContext[MypyStubContext]],
     ) -> t.Sequence[str]:
         # skip first part (root = file descriptor)
         return [part.proto.name for part in context.parts[1:]]
