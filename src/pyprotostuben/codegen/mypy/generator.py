@@ -32,31 +32,35 @@ from pyprotostuben.python.info import ModuleInfo
 
 
 @dataclass()
-class MypyStubContext(ModuleAstContext):
-    @dataclass()
-    class Pb2(ScopeInfo):
-        module: ModuleInfo
-        builder: Pb2AstBuilder
-
-    @dataclass()
-    class Pb2Grpc(ScopeInfo):
-        module: ModuleInfo
-        builder: Pb2GrpcAstBuilder
-
-    _pb2: t.Optional[Pb2]
-    _pb2_grpc: t.Optional[Pb2Grpc]
+class MypyStubContext(ModuleAstContext, ScopeInfo):
+    _pb2_module: t.Optional[ModuleInfo] = None
+    _pb2_builder: t.Optional[Pb2AstBuilder] = None
+    _pb2_grpc_module: t.Optional[ModuleInfo] = None
+    _pb2_grpc_builder: t.Optional[Pb2GrpcAstBuilder] = None
 
     @property
-    def pb2(self) -> Pb2:
-        if self._pb2 is None:
+    def pb2_module(self) -> ModuleInfo:
+        if self._pb2_module is None:
             raise ValueError
-        return self._pb2
+        return self._pb2_module
 
     @property
-    def pb2_grpc(self) -> Pb2Grpc:
-        if self._pb2_grpc is None:
+    def pb2_builder(self) -> Pb2AstBuilder:
+        if self._pb2_builder is None:
             raise ValueError
-        return self._pb2_grpc
+        return self._pb2_builder
+
+    @property
+    def pb2_grpc_module(self) -> ModuleInfo:
+        if self._pb2_grpc_module is None:
+            raise ValueError
+        return self._pb2_grpc_module
+
+    @property
+    def pb2_grpc_builder(self) -> Pb2GrpcAstBuilder:
+        if self._pb2_grpc_builder is None:
+            raise ValueError
+        return self._pb2_grpc_builder
 
 
 class MypyStubTrait(metaclass=abc.ABCMeta):
@@ -87,16 +91,15 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
         context.meta = self.__create_root_context(context)
 
     def leave_file_descriptor_proto(self, context: FileDescriptorContext[MypyStubContext]) -> None:
-        pb2 = context.meta.pb2
-        pb2_grpc = context.meta.pb2_grpc
+        scope = context.meta
 
-        pb2_module_ast = pb2.builder.build_module(pb2)
-        pb2_grpc_module_ast = pb2_grpc.builder.build_module(pb2_grpc)
+        pb2_module_ast = scope.pb2_builder.build_module(scope)
+        pb2_grpc_module_ast = scope.pb2_grpc_builder.build_module(scope)
 
         context.meta.generated_modules.update(
             {
-                pb2.module.stub_file: pb2_module_ast,
-                pb2_grpc.module.stub_file: pb2_grpc_module_ast,
+                scope.pb2_module.stub_file: pb2_module_ast,
+                scope.pb2_grpc_module.stub_file: pb2_grpc_module_ast,
             }
         )
 
@@ -104,13 +107,18 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
         context.meta = self.__create_sub_context(context.meta)
 
     def leave_enum_descriptor_proto(self, context: EnumDescriptorContext[MypyStubContext]) -> None:
-        context.parent.meta.pb2.enums.append(
+        proto = context.proto
+        scope = context.meta
+        parent = context.parent.meta
+        builder = scope.pb2_builder
+
+        parent.enums.append(
             EnumInfo(
                 body=[
-                    context.meta.pb2.builder.build_enum_def(
-                        name=context.proto.name,
+                    builder.build_enum_def(
+                        name=proto.name,
                         doc=build_docstring(context.location),
-                        scope=context.meta.pb2,
+                        scope=scope,
                     )
                 ],
             ),
@@ -121,13 +129,14 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
 
     def leave_enum_value_descriptor_proto(self, context: EnumValueDescriptorContext[MypyStubContext]) -> None:
         proto = context.proto
-        parent = context.meta.pb2
+        parent = context.meta
+        builder = parent.pb2_builder
 
         parent.enum_values.append(
             EnumValueInfo(
                 name=proto.name,
                 value=proto.number,
-                body=parent.builder.build_enum_value_def(
+                body=builder.build_enum_value_def(
                     name=proto.name,
                     doc=build_docstring(context.location),
                     value=proto.number,
@@ -143,14 +152,17 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
         if proto.options.map_entry:
             return
 
-        parent = context.parent.meta.pb2
+        scope = context.meta
+        parent = context.parent.meta
+        builder = scope.pb2_builder
+
         parent.messages.append(
             MessageInfo(
                 body=[
-                    parent.builder.build_message_def(
+                    builder.build_message_def(
                         name=proto.name,
                         doc=build_docstring(context.location),
-                        scope=context.meta.pb2,
+                        scope=scope,
                     ),
                 ],
             )
@@ -161,7 +173,7 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
 
     def leave_oneof_descriptor_proto(self, context: OneofDescriptorContext[MypyStubContext]) -> None:
         proto = context.proto
-        parent = context.meta.pb2
+        parent = context.meta
 
         parent.oneof_groups.append(proto.name)
 
@@ -170,51 +182,42 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
 
     def leave_field_descriptor_proto(self, context: FieldDescriptorContext[MypyStubContext]) -> None:
         proto = context.proto
-        parent = context.meta.pb2
-        builder = parent.builder
+        parent = context.meta
+        builder = context.meta.pb2_builder
 
-        info = self.__registry.resolve_proto_field(context.proto)
+        info = self.__registry.resolve_proto_field(proto)
         is_optional = proto.proto3_optional
 
         annotation = builder.build_type_ref(info)
-        if not isinstance(info, MapEntryInfo) and context.proto.label == context.proto.Label.LABEL_REPEATED:
+        if not isinstance(info, MapEntryInfo) and proto.label == proto.Label.LABEL_REPEATED:
             annotation = builder.build_repeated_ref(annotation)
 
         parent.fields.append(
             FieldInfo(
                 name=proto.name,
                 annotation=annotation,
-                # descriptor=builder.__inner.build_class_def(
-                #     name="_Descriptor",
-                #     bases=[builder.__inner.build_ref(TypeInfo.from_type(FieldDescriptor))],
-                #     body=[
-                #         builder.__inner.build_attr_stub(
-                #             name="name",
-                #             annotation=builder.__inner.build_str_ref(),
-                #         ),
-                #     ],
-                # ),
                 doc=build_docstring(context.location),
                 optional=is_optional,
-                default=None,
                 # TODO: support proto.default_value
-                oneof_group=parent.oneof_groups[context.proto.oneof_index]
-                if not is_optional and context.proto.HasField("oneof_index")
+                default=None,
+                oneof_group=parent.oneof_groups[proto.oneof_index]
+                if not is_optional and proto.HasField("oneof_index")
                 else None,
             )
         )
 
-        # if context.proto.HasField("extendee"):
-        #     (context.proto)
+        # TODO: support extensions
+        # if proto.HasField("extendee"):
+        #     (proto)
 
     def enter_service_descriptor_proto(self, context: ServiceDescriptorContext[MypyStubContext]) -> None:
         context.meta = self.__create_sub_context(context.meta)
 
     def leave_service_descriptor_proto(self, context: ServiceDescriptorContext[MypyStubContext]) -> None:
         name = context.proto.name
-        scope = context.meta.pb2_grpc
-        parent = context.parent.meta.pb2_grpc
-        builder = parent.builder
+        scope = context.meta
+        parent = context.parent.meta
+        builder = scope.pb2_grpc_builder
 
         doc = build_docstring(context.location)
 
@@ -230,14 +233,17 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
         pass
 
     def leave_method_descriptor_proto(self, context: MethodDescriptorContext[MypyStubContext]) -> None:
-        context.meta.pb2_grpc.methods.append(
+        proto = context.proto
+        parent = context.meta
+
+        parent.methods.append(
             MethodInfo(
-                name=context.proto.name,
+                name=proto.name,
                 doc=build_docstring(context.location),
-                server_input=self.__registry.resolve_proto_method_client_input(context.proto),
-                server_input_streaming=context.proto.client_streaming,
-                server_output=self.__registry.resolve_proto_method_server_output(context.proto),
-                server_output_streaming=context.proto.server_streaming,
+                server_input=self.__registry.resolve_proto_method_client_input(proto),
+                server_input_streaming=proto.client_streaming,
+                server_output=self.__registry.resolve_proto_method_server_output(proto),
+                server_output_streaming=proto.server_streaming,
             ),
         )
 
@@ -247,211 +253,31 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
 
         return MypyStubContext(
             generated_modules=context.meta.generated_modules,
-            _pb2=MypyStubContext.Pb2(
-                module=pb2_module,
-                builder=self.__trait.create_pb2_builder(pb2_module),
-                enums=[],
-                enum_values=[],
-                messages=[],
-                oneof_groups=[],
-                fields=[],
-                services=[],
-                methods=[],
-            ),
-            _pb2_grpc=MypyStubContext.Pb2Grpc(
-                module=pb2_grpc_module,
-                builder=self.__trait.create_pb2_grpc_builder(pb2_grpc_module),
-                enums=[],
-                enum_values=[],
-                messages=[],
-                oneof_groups=[],
-                fields=[],
-                services=[],
-                methods=[],
-            ),
+            _pb2_module=pb2_module,
+            _pb2_builder=self.__trait.create_pb2_builder(pb2_module),
+            _pb2_grpc_module=pb2_grpc_module,
+            _pb2_grpc_builder=self.__trait.create_pb2_grpc_builder(pb2_grpc_module),
+            enums=[],
+            enum_values=[],
+            messages=[],
+            oneof_groups=[],
+            fields=[],
+            services=[],
+            methods=[],
         )
 
     def __create_sub_context(self, context: MypyStubContext) -> MypyStubContext:
         return MypyStubContext(
             generated_modules=context.generated_modules,
-            _pb2=MypyStubContext.Pb2(
-                module=context.pb2.module,
-                builder=context.pb2.builder,
-                enums=[],
-                enum_values=[],
-                messages=[],
-                oneof_groups=[],
-                fields=[],
-                services=[],
-                methods=[],
-            ),
-            _pb2_grpc=MypyStubContext.Pb2Grpc(
-                module=context.pb2_grpc.module,
-                builder=context.pb2_grpc.builder,
-                enums=[],
-                enum_values=[],
-                messages=[],
-                oneof_groups=[],
-                fields=[],
-                services=[],
-                methods=[],
-            ),
+            _pb2_module=context.pb2_module,
+            _pb2_builder=context.pb2_builder,
+            _pb2_grpc_module=context.pb2_grpc_module,
+            _pb2_grpc_builder=context.pb2_grpc_builder,
+            enums=[],
+            enum_values=[],
+            messages=[],
+            oneof_groups=[],
+            fields=[],
+            services=[],
+            methods=[],
         )
-
-    # def __build_extension_field(
-    #     self,
-    #     builder: ASTBuilder,
-    #     field: FieldInfo,
-    # ) -> ast.stmt:
-    #     return builder.build_attr_stub(
-    #         name=field.name,
-    #         annotation=builder.build_generic_ref(
-    #             TypeInfo.build(ModuleInfo.from_obj(extension), "ExtensionDescriptor"),
-    #             field.annotation,
-    #         ),
-    #     )
-
-    # def __build_service_descriptors(
-    #     self,
-    #     context: FileDescriptorContext[MypyStubContext],
-    #     grpc: GRPCContext,
-    # ) -> t.Sequence[ast.stmt]:
-    #     builder = grpc.builder.__inner
-    #
-    #     return [
-    #         builder.build_class_def(
-    #             name=service.name,
-    #             bases=[builder.build_ref(TypeInfo.from_type(ServiceDescriptor))],
-    #             body=[
-    #                 *(
-    #                     builder.build_class_def(
-    #                         name=method.name,
-    #                         bases=[builder.build_ref(TypeInfo.from_type(MethodDescriptor))],
-    #                         body=[
-    #                             builder.build_attr_stub(
-    #                                 name="name",
-    #                                 annotation=builder.build_str_ref(),
-    #                             ),
-    #                             builder.build_attr_stub(
-    #                                 name="full_name",
-    #                                 annotation=builder.build_str_ref(),
-    #                             ),
-    #                             builder.build_attr_stub(
-    #                                 name="index",
-    #                                 annotation=builder.build_int_ref(),
-    #                             ),
-    #                             builder.build_attr_stub(
-    #                                 name="containing_service",
-    #                                 annotation=builder.build_int_ref(),
-    #                             ),
-    #                             builder.build_attr_stub(
-    #                                 name="input_type",
-    #                                 annotation=builder.build_int_ref(),
-    #                             ),
-    #                             builder.build_attr_stub(
-    #                                 name="output_type",
-    #                                 annotation=builder.build_int_ref(),
-    #                             ),
-    #                             builder.build_attr_stub(
-    #                                 name="client_streaming",
-    #                                 annotation=builder.build_int_ref(),
-    #                             ),
-    #                             builder.build_attr_stub(
-    #                                 name="server_streaming",
-    #                                 annotation=builder.build_int_ref(),
-    #                             ),
-    #                         ],
-    #                         is_final=True,
-    #                     )
-    #                     for method in service.method
-    #                 ),
-    #                 builder.build_typed_dict_def(
-    #                     name="_MethodsByName",
-    #                     items={method.name: builder.build_name(method.name) for method in service.method},
-    #                     is_final=True,
-    #                 ),
-    #             ],
-    #             is_final=True,
-    #         )
-    #         for service in context.proto.service
-    #     ]
-    #
-    # def __build_file_descriptor(
-    #     self,
-    #     context: FileDescriptorContext[MypyStubContext],
-    #     message: MessageContext,
-    #     # grpc: GRPCContext,
-    # ) -> t.Sequence[ast.stmt]:
-    #     builder = message.builder.__inner
-    #
-    #     return [
-    #         builder.build_class_def(
-    #             name="_FileDescriptor",
-    #             bases=[
-    #                 builder.build_ref(TypeInfo.from_type(FileDescriptor)),
-    #             ],
-    #             body=[
-    #                 *(
-    #                     builder.build_typed_dict_def(
-    #                         name="_EnumTypesByName",
-    #                         items={
-    #                             enum_type.name: builder.build_type_ref(builder.build_name(enum_type.name))
-    #                             for enum_type in context.proto.enum_type
-    #                         },
-    #                         is_final=True,
-    #                     ),
-    #                     builder.build_typed_dict_def(
-    #                         name="_MessageTypesByName",
-    #                         items={
-    #                             message_type.name: builder.build_type_ref(builder.build_name(message_type.name))
-    #                             for message_type in context.proto.message_type
-    #                         },
-    #                         is_final=True,
-    #                     ),
-    #                     builder.build_typed_dict_def(
-    #                         name="_ServicesByName",
-    #                         items={
-    #                             service.name: builder.build_type_ref(builder.build_name(service.name))
-    #                             for service in context.proto.service
-    #                         },
-    #                         is_final=True,
-    #                     ),
-    #                     # builder.build_typed_dict_def(
-    #                     #     name="_ExtensionsByName",
-    #                     #     items={field.name: ... for field in message.fields},
-    #                     #     is_final=True,
-    #                     # ),
-    #                 ),
-    #                 builder.build_attr_stub(
-    #                     name="name",
-    #                     annotation=builder.build_str_ref(),
-    #                 ),
-    #                 builder.build_attr_stub(
-    #                     name="package",
-    #                     annotation=builder.build_str_ref(),
-    #                 ),
-    #                 builder.build_attr_stub(
-    #                     name="enum_types_by_name",
-    #                     annotation=builder.build_name("_EnumTypesByName"),
-    #                 ),
-    #                 builder.build_attr_stub(
-    #                     name="message_types_by_name",
-    #                     annotation=builder.build_name("_MessageTypesByName"),
-    #                 ),
-    #                 builder.build_attr_stub(
-    #                     name="services_by_name",
-    #                     annotation=builder.build_name("_ServicesByName"),
-    #                 ),
-    #                 builder.build_attr_stub(
-    #                     name="extensions_by_name",
-    #                     annotation=builder.build_name("_ExtensionsByName"),
-    #                 ),
-    #             ],
-    #             is_final=True,
-    #         ),
-    #         builder.build_attr_stub(
-    #             name="DESCRIPTOR",
-    #             annotation=builder.build_name("_FileDescriptor"),
-    #             is_final=True,
-    #         ),
-    #     ]

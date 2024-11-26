@@ -1,6 +1,6 @@
 import ast
 import typing as t
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from google.protobuf.compiler.plugin_pb2 import CodeGeneratorResponse
@@ -15,7 +15,7 @@ from pyprotostuben.protobuf.visitor.walker import Walker
 
 @dataclass()
 class ModuleAstContext:
-    generated_modules: t.MutableMapping[Path, ast.Module]
+    generated_modules: t.MutableMapping[Path, ast.Module] = field(default_factory=dict)
 
 
 T = t.TypeVar("T", bound=ModuleAstContext)

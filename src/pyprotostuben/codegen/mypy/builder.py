@@ -29,25 +29,18 @@ class Pb2AstBuilder:
         #  See: https://github.com/nipunn1313/mypy-protobuf/issues/484
         return self.__inner.build_class_def(
             name=name,
-            # TODO: consider enum type wrapper usage
-            # bases=[self.__protobuf_enum_ref],
+            bases=[self.__protobuf_enum_ref],
             doc=doc,
-            body=list(
-                chain(
-                    self.__build_enum_descriptor_def(name),
-                    self.__build_enum_base_stubs(name, scope),
-                    chain.from_iterable(value.body for value in scope.enum_values),
-                )
-            ),
+            body=list(chain.from_iterable(value.body for value in scope.enum_values)),
         )
 
     def build_enum_value_def(self, name: str, doc: t.Optional[str], value: object) -> t.Sequence[ast.stmt]:
+        # TODO: actual type is not fully compatible with IntEnum.
+        #  See: https://github.com/nipunn1313/mypy-protobuf/issues/484
         result = [
-            self.__inner.build_attr_stub(
-                name=name,
-                annotation=self.__inner.build_class_var_ref(
-                    self.__inner.build_literal_ref(self.__inner.build_const(value))
-                ),
+            self.__inner.build_attr_assign(
+                name,
+                value=self.__inner.build_const(value),
             ),
         ]
 
@@ -63,12 +56,12 @@ class Pb2AstBuilder:
             doc=doc,
             body=list(
                 chain(
-                    self.__build_message_descriptor_def(name),
                     self.__build_message_nested_body(scope),
                     (self.__build_message_init_stub(scope.fields),),
                     self.__build_message_field_stubs(scope.fields),
                     (self.__build_protobuf_message_has_field_method_stub(scope.fields),),
                     self.__build_which_oneof_method_stubs(scope.fields),
+                    self.__build_message_descriptor_def(name),
                 )
             ),
         )
@@ -78,7 +71,7 @@ class Pb2AstBuilder:
             chain(
                 chain.from_iterable(enum.body for enum in scope.enums),
                 chain.from_iterable(message.body for message in scope.messages),
-                # chain.from_iterable(service.body for service in scope.services),
+                # self.__build_file_descriptor_def(scope),
             )
         )
 
@@ -133,12 +126,43 @@ class Pb2AstBuilder:
             ),
         ]
 
+    def __build_file_descriptor_def(self) -> t.Sequence[ast.stmt]:
+        if not self.__include_descriptors:
+            return []
+
+        return self.__build_descriptor_def(
+            "XXX",
+            self.__protobuf_file_descriptor_ref,
+            name=self.__inner.build_str_ref(),
+            package=self.__inner.build_str_ref(),
+            edition=self.__inner.build_none_ref(),
+            dependencies=self.__inner.build_sequence_ref(self.__protobuf_file_descriptor_ref),
+            public_dependencies=self.__inner.build_sequence_ref(self.__protobuf_file_descriptor_ref),
+            message_types_by_name=self.__inner.build_mapping_ref(
+                self.__inner.build_str_ref(),
+                self.__protobuf_descriptor_ref,
+            ),
+            enum_types_by_name=self.__inner.build_mapping_ref(
+                self.__inner.build_str_ref(),
+                self.__protobuf_enum_ref,
+            ),
+            extensions_by_name=self.__inner.build_mapping_ref(
+                self.__inner.build_str_ref(),
+                self.__protobuf_field_descriptor_ref,
+            ),
+            services_by_name=self.__inner.build_mapping_ref(
+                self.__inner.build_str_ref(),
+                self.__protobuf_service_descriptor_ref,
+            ),
+        )
+
     def __build_enum_descriptor_def(self, name: str) -> t.Sequence[ast.stmt]:
         if not self.__include_descriptors:
             return []
 
         return self.__build_descriptor_def(
             name,
+            self.__protobuf_enum_descriptor_ref,
             containing_type=self.__inner.build_optional_ref(self.__protobuf_descriptor_ref),
             file=self.__inner.build_ref(self.__protobuf_file_descriptor_ref),
             full_name=self.__inner.build_str_ref(),
@@ -161,6 +185,7 @@ class Pb2AstBuilder:
 
         return self.__build_descriptor_def(
             name,
+            self.__protobuf_descriptor_ref,
             name=self.__inner.build_str_ref(),
             full_name=self.__inner.build_str_ref(),
             containing_type=self.__inner.build_optional_ref(self.__protobuf_descriptor_ref),
@@ -189,11 +214,11 @@ class Pb2AstBuilder:
             ),
         )
 
-    def __build_descriptor_def(self, name: str, /, **kwargs: ast.expr) -> t.Sequence[ast.stmt]:
+    def __build_descriptor_def(self, name: str, base: TypeRef, /, **kwargs: ast.expr) -> t.Sequence[ast.stmt]:
         return [
             self.__inner.build_class_def(
                 name="_Descriptor",
-                bases=[self.__inner.build_ref(self.__protobuf_descriptor_ref)],
+                bases=[self.__inner.build_ref(base)],
                 body=[
                     self.__inner.build_attr_stub(
                         name=name,
@@ -300,7 +325,8 @@ class Pb2AstBuilder:
 
     @cached_property
     def __protobuf_enum_ref(self) -> TypeInfo:
-        return TypeInfo.build(ModuleInfo.from_str("google.protobuf.internal.enum_type_wrapper"), "EnumTypeWrapper")
+        # TODO: consider enum type wrapper usage `google.protobuf.internal.enum_type_wrapper.EnumTypeWrapper`
+        return TypeInfo.build(ModuleInfo(None, "enum"), "IntEnum")
 
     @cached_property
     def __protobuf_field_repeated_ref(self) -> TypeInfo:
@@ -333,6 +359,14 @@ class Pb2AstBuilder:
     @cached_property
     def __protobuf_field_descriptor_ref(self) -> TypeInfo:
         return TypeInfo.build(self.__protobuf_descriptor_module, "FieldDescriptor")
+
+    @cached_property
+    def __protobuf_service_descriptor_ref(self) -> TypeInfo:
+        return TypeInfo.build(self.__protobuf_descriptor_module, "ServiceDescriptor")
+
+    @cached_property
+    def __protobuf_method_descriptor_ref(self) -> TypeInfo:
+        return TypeInfo.build(self.__protobuf_descriptor_module, "MethodDescriptor")
 
 
 class Pb2GrpcAstBuilder:

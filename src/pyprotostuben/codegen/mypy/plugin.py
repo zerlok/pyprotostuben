@@ -92,8 +92,4 @@ class MypyStubFactory(MypyStubTrait):
 
     # NOTE: this method must be picklable, thus it is public
     def create_visitor_context(self, _: ProtoFile) -> MypyStubContext:
-        return MypyStubContext(
-            generated_modules={},
-            _pb2=None,
-            _pb2_grpc=None,
-        )
+        return MypyStubContext()

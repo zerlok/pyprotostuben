@@ -1,6 +1,6 @@
 import ast
 import typing as t
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from pyprotostuben.python.ast_builder import TypeRef
 
@@ -51,10 +51,10 @@ class MethodInfo:
 
 @dataclass()
 class ScopeInfo:
-    enums: t.MutableSequence[EnumInfo]
-    enum_values: t.MutableSequence[EnumValueInfo]
-    messages: t.MutableSequence[MessageInfo]
-    oneof_groups: t.MutableSequence[str]
-    fields: t.MutableSequence[FieldInfo]
-    services: t.MutableSequence[ServiceInfo]
-    methods: t.MutableSequence[MethodInfo]
+    enums: t.MutableSequence[EnumInfo] = field(default_factory=list)
+    enum_values: t.MutableSequence[EnumValueInfo] = field(default_factory=list)
+    messages: t.MutableSequence[MessageInfo] = field(default_factory=list)
+    oneof_groups: t.MutableSequence[str] = field(default_factory=list)
+    fields: t.MutableSequence[FieldInfo] = field(default_factory=list)
+    services: t.MutableSequence[ServiceInfo] = field(default_factory=list)
+    methods: t.MutableSequence[MethodInfo] = field(default_factory=list)

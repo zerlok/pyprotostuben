@@ -2,9 +2,9 @@ import ast
 import typing as t
 from dataclasses import dataclass, field
 from functools import cached_property
+from itertools import chain
 
 from pyprotostuben.codegen.module_ast import ModuleAstContext
-from pyprotostuben.codegen.mypy.model import MethodInfo
 from pyprotostuben.logging import LoggerMixin
 from pyprotostuben.protobuf.location import build_docstring
 from pyprotostuben.protobuf.registry import TypeRegistry
@@ -19,23 +19,48 @@ from pyprotostuben.protobuf.visitor.model import (
     OneofDescriptorContext,
     ServiceDescriptorContext,
 )
-from pyprotostuben.python.ast_builder import ASTBuilder
+from pyprotostuben.python.ast_builder import ASTBuilder, ModuleDependencyResolver, TypeRef
 from pyprotostuben.python.info import ModuleInfo, PackageInfo, TypeInfo
-from pyprotostuben.stack import MutableStack
 from pyprotostuben.string_case import camel2snake
 
 
-@dataclass()
-class Scope:
-    methods: t.MutableSequence[MethodInfo] = field(default_factory=list)
-    body: t.MutableSequence[ast.stmt] = field(default_factory=list)
+@dataclass(frozen=True)
+class MethodInfo:
+    name: str
+    qualname: str
+    doc: t.Optional[str]
+    server_input: TypeRef
+    server_input_streaming: bool
+    server_output: TypeRef
+    server_output_streaming: bool
+
+
+@dataclass(frozen=True)
+class ServiceInfo:
+    service: ast.stmt
+    service_registrator: ast.stmt
+    client: ast.stmt
+    client_factory: ast.stmt
 
 
 @dataclass()
 class BrokRPCContext(ModuleAstContext):
-    builder: ASTBuilder
-    module: ModuleInfo
-    scopes: MutableStack[Scope]
+    _module: t.Optional[ModuleInfo] = None
+    _builder: t.Optional[ASTBuilder] = None
+    services: t.MutableSequence[ServiceInfo] = field(default_factory=list)
+    methods: t.MutableSequence[MethodInfo] = field(default_factory=list)
+
+    @property
+    def module(self) -> ModuleInfo:
+        if self._module is None:
+            raise ValueError
+        return self._module
+
+    @property
+    def builder(self) -> ASTBuilder:
+        if self._builder is None:
+            raise ValueError
+        return self._builder
 
 
 class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin):
@@ -43,17 +68,27 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
         self.__registry = registry
 
     def enter_file_descriptor_proto(self, context: FileDescriptorContext[BrokRPCContext]) -> None:
-        context.meta.scopes.put(Scope())
+        context.meta = self.__create_root_context(context)
 
     def leave_file_descriptor_proto(self, context: FileDescriptorContext[BrokRPCContext]) -> None:
-        scope = context.meta.scopes.pop()
+        scope = context.meta
 
-        if scope.body:
+        if scope.services:
             context.meta.generated_modules.update(
                 {
                     context.meta.module.file: context.meta.builder.build_module(
                         doc=f"Source: {context.file.proto_path}",
-                        body=scope.body,
+                        body=list(
+                            chain.from_iterable(
+                                (
+                                    service.service,
+                                    service.service_registrator,
+                                    service.client,
+                                    service.client_factory,
+                                )
+                                for service in scope.services
+                            )
+                        ),
                     ),
                 }
             )
@@ -89,41 +124,60 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
         pass
 
     def enter_service_descriptor_proto(self, context: ServiceDescriptorContext[BrokRPCContext]) -> None:
-        context.meta.scopes.put(Scope())
+        context.meta = self.__create_sub_context(context.meta)
 
     def leave_service_descriptor_proto(self, context: ServiceDescriptorContext[BrokRPCContext]) -> None:
-        scope = context.meta.scopes.pop()
-        parent = context.meta.scopes.get_last()
+        proto = context.proto
+        scope = context.meta
+        parent = context.parent.meta
 
-        service_class_name = f"{context.proto.name}Service"
-        client_class_name = f"{context.proto.name}Client"
+        service_class_name = f"{proto.name}Service"
+        client_class_name = f"{proto.name}Client"
 
-        parent.body.extend(
-            [
-                self.__build_service_def(context, service_class_name, scope.methods),
-                self.__build_service_registrator_def(context, service_class_name, scope.methods),
-                self.__build_client_def(context, client_class_name, scope.methods),
-                self.__build_client_factory_def(context, client_class_name, scope.methods),
-            ]
+        parent.services.append(
+            ServiceInfo(
+                service=self.__build_service_def(context, service_class_name, scope.methods),
+                service_registrator=self.__build_service_registrator_def(context, service_class_name, scope.methods),
+                client=self.__build_client_def(context, client_class_name, scope.methods),
+                client_factory=self.__build_client_factory_def(context, client_class_name, scope.methods),
+            ),
         )
 
     def enter_method_descriptor_proto(self, context: MethodDescriptorContext[BrokRPCContext]) -> None:
         pass
 
     def leave_method_descriptor_proto(self, context: MethodDescriptorContext[BrokRPCContext]) -> None:
-        scope = context.meta.scopes.get_last()
+        proto = context.proto
+        parent = context.meta
+        builder = parent.builder
 
-        builder = context.meta.builder
-
-        scope.methods.append(
+        parent.methods.append(
             MethodInfo(
-                name=camel2snake(context.proto.name),
+                name=camel2snake(proto.name),
+                qualname=f"/{context.root.proto.package}/{context.parent.proto.name}/{proto.name}",
                 doc=build_docstring(context.location),
-                server_input=builder.build_ref(self.__registry.resolve_proto_method_client_input(context.proto)),
-                server_input_streaming=context.proto.client_streaming,
-                server_output=builder.build_ref(self.__registry.resolve_proto_method_server_output(context.proto)),
-                server_output_streaming=context.proto.server_streaming,
+                server_input=builder.build_ref(self.__registry.resolve_proto_method_client_input(proto)),
+                server_input_streaming=proto.client_streaming,
+                server_output=builder.build_ref(self.__registry.resolve_proto_method_server_output(proto)),
+                server_output_streaming=proto.server_streaming,
             )
+        )
+
+    def __create_root_context(self, context: FileDescriptorContext[BrokRPCContext]) -> BrokRPCContext:
+        file = context.file
+        module = ModuleInfo(file.pb2_package, f"{file.name}_brokrpc")
+
+        return BrokRPCContext(
+            generated_modules=context.meta.generated_modules,
+            _module=module,
+            _builder=ASTBuilder(ModuleDependencyResolver(module)),
+        )
+
+    def __create_sub_context(self, context: BrokRPCContext) -> BrokRPCContext:
+        return BrokRPCContext(
+            generated_modules=context.generated_modules,
+            _module=context.module,
+            _builder=context.builder,
         )
 
     def __build_service_def(
@@ -180,7 +234,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
                     func=builder.build_name("server", "register_unary_unary_handler"),
                     kwargs={
                         "func": builder.build_name("service", method.name),
-                        "routing_key": self.__build_routing_key(context, method),
+                        "routing_key": builder.build_const(method.qualname),
                         "serializer": self.__build_serializer(builder, method),
                     },
                 )
@@ -302,13 +356,10 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
         return builder.build_call(
             func=builder.build_name("client", "unary_unary_caller"),
             kwargs={
-                "routing_key": self.__build_routing_key(context, method),
+                "routing_key": builder.build_const(method.qualname),
                 "serializer": self.__build_serializer(builder, method),
             },
         )
-
-    def __build_routing_key(self, context: ServiceDescriptorContext[BrokRPCContext], method: MethodInfo) -> ast.expr:
-        return ast.Constant(value=f"/{context.root.proto.package}/{context.proto.name}/{method.name}")
 
     def __build_serializer(self, builder: ASTBuilder, method: MethodInfo) -> ast.expr:
         return builder.build_call(
