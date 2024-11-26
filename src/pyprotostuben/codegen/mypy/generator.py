@@ -7,6 +7,7 @@ from pyprotostuben.codegen.mypy.builder import Pb2AstBuilder, Pb2GrpcAstBuilder
 from pyprotostuben.codegen.mypy.model import (
     EnumInfo,
     EnumValueInfo,
+    ExtensionInfo,
     FieldInfo,
     MessageInfo,
     MethodInfo,
@@ -22,6 +23,7 @@ from pyprotostuben.protobuf.visitor.model import (
     DescriptorContext,
     EnumDescriptorContext,
     EnumValueDescriptorContext,
+    ExtensionDescriptorContext,
     FieldDescriptorContext,
     FileDescriptorContext,
     MethodDescriptorContext,
@@ -205,10 +207,6 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
             )
         )
 
-        # TODO: support extensions
-        # if proto.HasField("extendee"):
-        #     (proto)
-
     def enter_service_descriptor_proto(self, context: ServiceDescriptorContext[MypyStubContext]) -> None:
         context.meta = self.__create_sub_context(context)
 
@@ -245,6 +243,34 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
                 server_output=self.__registry.resolve_proto_method_server_output(proto),
                 server_output_streaming=proto.server_streaming,
             ),
+        )
+
+    def enter_extension_descriptor_proto(self, context: ExtensionDescriptorContext[MypyStubContext]) -> None:
+        pass
+
+    def leave_extension_descriptor_proto(self, context: ExtensionDescriptorContext[MypyStubContext]) -> None:
+        proto = context.proto
+        parent = context.meta
+        builder = context.meta.pb2_builder
+
+        if not proto.HasField("extendee"):
+            return
+
+        info = self.__registry.resolve_proto_field(proto)
+
+        annotation = builder.build_type_ref(info)
+        if not isinstance(info, MapEntryInfo) and proto.label == proto.Label.LABEL_REPEATED:
+            annotation = builder.build_repeated_ref(annotation)
+
+        parent.extensions.append(
+            ExtensionInfo(
+                name=proto.name,
+                annotation=annotation,
+                doc=build_docstring(context.location),
+                # TODO: support proto.default_value
+                default=None,
+                extended=self.__registry.resolve_proto_message(proto.extendee),
+            )
         )
 
     def __create_root_context(self, context: FileDescriptorContext[MypyStubContext]) -> MypyStubContext:

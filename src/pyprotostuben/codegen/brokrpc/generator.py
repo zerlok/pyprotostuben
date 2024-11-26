@@ -8,11 +8,12 @@ from pyprotostuben.codegen.module_ast import ModuleAstContext
 from pyprotostuben.logging import LoggerMixin
 from pyprotostuben.protobuf.location import build_docstring
 from pyprotostuben.protobuf.registry import TypeRegistry
-from pyprotostuben.protobuf.visitor.decorator import ProtoVisitorDecorator
+from pyprotostuben.protobuf.visitor.decorator import ProtoVisitorDecorator, T_contra
 from pyprotostuben.protobuf.visitor.model import (
     DescriptorContext,
     EnumDescriptorContext,
     EnumValueDescriptorContext,
+    ExtensionDescriptorContext,
     FieldDescriptorContext,
     FileDescriptorContext,
     MethodDescriptorContext,
@@ -162,6 +163,12 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
                 server_output_streaming=proto.server_streaming,
             )
         )
+
+    def enter_extension_descriptor_proto(self, context: ExtensionDescriptorContext[T_contra]) -> None:
+        pass
+
+    def leave_extension_descriptor_proto(self, context: ExtensionDescriptorContext[T_contra]) -> None:
+        pass
 
     def __create_root_context(self, context: FileDescriptorContext[BrokRPCContext]) -> BrokRPCContext:
         file = context.file

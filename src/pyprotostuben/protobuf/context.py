@@ -19,6 +19,7 @@ from pyprotostuben.protobuf.visitor.model import (
     DescriptorContext,
     EnumDescriptorContext,
     EnumValueDescriptorContext,
+    ExtensionDescriptorContext,
     FieldDescriptorContext,
     FileDescriptorContext,
     MethodDescriptorContext,
@@ -78,6 +79,9 @@ class ContextBuilder(ProtoVisitor[BuildContext], LoggerMixin):
         pass
 
     def visit_method_descriptor_proto(self, _: MethodDescriptorContext[BuildContext]) -> None:
+        pass
+
+    def visit_extension_descriptor_proto(self, context: ExtensionDescriptorContext[BuildContext]) -> None:
         pass
 
     # TODO: speed up with multiprocessing by files

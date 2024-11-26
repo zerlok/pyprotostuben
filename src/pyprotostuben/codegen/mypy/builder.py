@@ -4,7 +4,7 @@ from collections import defaultdict
 from functools import cached_property
 from itertools import chain
 
-from pyprotostuben.codegen.mypy.model import FieldInfo, MethodInfo, ScopeInfo
+from pyprotostuben.codegen.mypy.model import MethodInfo, ScopeInfo
 from pyprotostuben.protobuf.registry import MapEntryInfo, ProtoInfo
 from pyprotostuben.python.ast_builder import ASTBuilder, TypeRef
 from pyprotostuben.python.info import ModuleInfo, TypeInfo
@@ -58,10 +58,11 @@ class Pb2AstBuilder:
             body=list(
                 chain(
                     self.__build_message_nested_body(scope),
-                    (self.__build_message_init_stub(scope.fields),),
-                    self.__build_message_field_stubs(scope.fields),
-                    (self.__build_protobuf_message_has_field_method_stub(scope.fields),),
-                    self.__build_which_oneof_method_stubs(scope.fields),
+                    (self.__build_message_init_stub(scope),),
+                    self.__build_message_field_stubs(scope),
+                    (self.__build_protobuf_message_has_field_method_stub(scope),),
+                    self.__build_which_oneof_method_stubs(scope),
+                    self.__build_extensions(scope),
                     self.__build_descriptor_annotation(self.__protobuf_message_descriptor_ref),
                 )
             ),
@@ -72,6 +73,7 @@ class Pb2AstBuilder:
             chain(
                 chain.from_iterable(enum.body for enum in scope.enums),
                 chain.from_iterable(message.body for message in scope.messages),
+                self.__build_extensions(scope),
                 self.__build_descriptor_annotation(self.__protobuf_file_descriptor_ref),
             )
         )
@@ -90,43 +92,6 @@ class Pb2AstBuilder:
     def build_repeated_ref(self, inner: TypeRef) -> ast.expr:
         return self.__inner.build_generic_ref(self.__protobuf_field_repeated_ref, inner)
 
-    def __build_enum_base_stubs(self) -> t.Sequence[ast.stmt]:
-        return [
-            self.__inner.build_class_method_stub_def(
-                name="Name",
-                args=[
-                    self.__inner.build_pos_arg(
-                        name="number",
-                        annotation=self.__inner.build_int_ref(),
-                    ),
-                ],
-                returns=self.__inner.build_str_ref(),
-            ),
-            self.__inner.build_class_method_stub_def(
-                name="Value",
-                args=[
-                    self.__inner.build_pos_arg(
-                        name="name",
-                        annotation=self.__inner.build_str_ref(),
-                    ),
-                ],
-                returns=self.__inner.build_int_ref(),
-            ),
-            self.__inner.build_attr_assign(
-                "ValueType",
-                value=self.__inner.build_final_ref(self.__inner.build_class_var_ref(self.__inner.build_int_ref())),
-            ),
-            self.__inner.build_class_method_stub_def(
-                name="items",
-                returns=self.__inner.build_sequence_ref(
-                    self.__inner.build_tuple_ref(
-                        self.__inner.build_str_ref(),
-                        self.__inner.build_int_ref(),
-                    )
-                ),
-            ),
-        ]
-
     def __build_descriptor_annotation(self, base: TypeRef) -> t.Sequence[ast.stmt]:
         if not self.__include_descriptors:
             return []
@@ -144,7 +109,7 @@ class Pb2AstBuilder:
             chain.from_iterable(message.body for message in scope.messages),
         )
 
-    def __build_message_init_stub(self, fields: t.Sequence[FieldInfo]) -> ast.stmt:
+    def __build_message_init_stub(self, scope: ScopeInfo) -> ast.stmt:
         return self.__inner.build_init_stub(
             [
                 self.__inner.build_kw_arg(
@@ -158,11 +123,11 @@ class Pb2AstBuilder:
                     if self.__all_init_args_optional or field.optional or field.oneof_group is not None
                     else None,
                 )
-                for field in fields
+                for field in scope.fields
             ],
         )
 
-    def __build_message_field_stubs(self, fields: t.Sequence[FieldInfo]) -> t.Iterable[ast.stmt]:
+    def __build_message_field_stubs(self, scope: ScopeInfo) -> t.Iterable[ast.stmt]:
         return chain.from_iterable(
             (
                 self.__inner.build_property_getter_stub(name=field.name, annotation=field.annotation, doc=field.doc),
@@ -170,11 +135,11 @@ class Pb2AstBuilder:
             )
             if self.__mutable
             else (self.__inner.build_property_getter_stub(name=field.name, annotation=field.annotation, doc=field.doc),)
-            for field in fields
+            for field in scope.fields
         )
 
-    def __build_protobuf_message_has_field_method_stub(self, fields: t.Sequence[FieldInfo]) -> ast.stmt:
-        optional_field_names = [self.__inner.build_const(field.name) for field in fields if field.optional]
+    def __build_protobuf_message_has_field_method_stub(self, scope: ScopeInfo) -> ast.stmt:
+        optional_field_names = [self.__inner.build_const(field.name) for field in scope.fields if field.optional]
 
         return self.__inner.build_method_stub(
             name="HasField",
@@ -187,9 +152,9 @@ class Pb2AstBuilder:
             returns=self.__inner.build_bool_ref() if optional_field_names else self.__inner.build_no_return_ref(),
         )
 
-    def __build_which_oneof_method_stubs(self, fields: t.Sequence[FieldInfo]) -> t.Iterable[ast.stmt]:
+    def __build_which_oneof_method_stubs(self, scope: ScopeInfo) -> t.Iterable[ast.stmt]:
         oneofs: t.DefaultDict[str, t.List[ast.expr]] = defaultdict(list)
-        for field in fields:
+        for field in scope.fields:
             if field.oneof_group is not None:
                 oneofs[field.oneof_group].append(self.__inner.build_const(field.name))
 
@@ -222,6 +187,21 @@ class Pb2AstBuilder:
             for name, items in oneofs.items()
         )
 
+    def __build_extensions(self, scope: ScopeInfo) -> t.Sequence[ast.stmt]:
+        return [
+            self.__inner.build_attr_stub(
+                name=extension.name,
+                annotation=self.__inner.build_generic_ref(
+                    self.__protobuf_extension_descriptor_ref,
+                    extension.extended,
+                    extension.annotation,
+                ),
+                default=extension.default,
+                is_final=True,
+            )
+            for extension in scope.extensions
+        ]
+
     @cached_property
     def __protobuf_message_ref(self) -> TypeInfo:
         return TypeInfo.build(ModuleInfo.from_str("google.protobuf.message"), "Message")
@@ -252,24 +232,8 @@ class Pb2AstBuilder:
         return TypeInfo.build(self.__protobuf_descriptor_module, "FileDescriptor")
 
     @cached_property
-    def __protobuf_enum_descriptor_ref(self) -> TypeInfo:
-        return TypeInfo.build(self.__protobuf_descriptor_module, "EnumDescriptor")
-
-    @cached_property
-    def __protobuf_enum_value_descriptor_ref(self) -> TypeInfo:
-        return TypeInfo.build(self.__protobuf_descriptor_module, "EnumValueDescriptor")
-
-    @cached_property
-    def __protobuf_field_descriptor_ref(self) -> TypeInfo:
-        return TypeInfo.build(self.__protobuf_descriptor_module, "FieldDescriptor")
-
-    @cached_property
-    def __protobuf_service_descriptor_ref(self) -> TypeInfo:
-        return TypeInfo.build(self.__protobuf_descriptor_module, "ServiceDescriptor")
-
-    @cached_property
-    def __protobuf_method_descriptor_ref(self) -> TypeInfo:
-        return TypeInfo.build(self.__protobuf_descriptor_module, "MethodDescriptor")
+    def __protobuf_extension_descriptor_ref(self) -> TypeInfo:
+        return TypeInfo.build(ModuleInfo.from_str("pyprotostuben.protobuf.extension"), "ExtensionDescriptor")
 
 
 class Pb2GrpcAstBuilder:

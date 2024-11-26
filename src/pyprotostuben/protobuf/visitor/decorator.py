@@ -6,6 +6,7 @@ from pyprotostuben.protobuf.visitor.model import (
     DescriptorContext,
     EnumDescriptorContext,
     EnumValueDescriptorContext,
+    ExtensionDescriptorContext,
     FieldDescriptorContext,
     FileDescriptorContext,
     MethodDescriptorContext,
@@ -81,6 +82,14 @@ class ProtoVisitorDecorator(t.Generic[T_contra], metaclass=abc.ABCMeta):
     def leave_method_descriptor_proto(self, context: MethodDescriptorContext[T_contra]) -> None:
         raise NotImplementedError
 
+    @abc.abstractmethod
+    def enter_extension_descriptor_proto(self, context: ExtensionDescriptorContext[T_contra]) -> None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def leave_extension_descriptor_proto(self, context: ExtensionDescriptorContext[T_contra]) -> None:
+        raise NotImplementedError
+
 
 class EnterProtoVisitorDecorator(ProtoVisitorDecorator[T_contra]):
     def __init__(self, *nested: ProtoVisitor[T_contra]) -> None:
@@ -140,6 +149,13 @@ class EnterProtoVisitorDecorator(ProtoVisitorDecorator[T_contra]):
             nested.visit_method_descriptor_proto(context)
 
     def leave_method_descriptor_proto(self, context: MethodDescriptorContext[T_contra]) -> None:
+        pass
+
+    def enter_extension_descriptor_proto(self, context: ExtensionDescriptorContext[T_contra]) -> None:
+        for nested in self.__nested:
+            nested.visit_extension_descriptor_proto(context)
+
+    def leave_extension_descriptor_proto(self, context: ExtensionDescriptorContext[T_contra]) -> None:
         pass
 
 
@@ -202,3 +218,10 @@ class LeaveProtoVisitorDecorator(ProtoVisitorDecorator[T_contra]):
     def leave_method_descriptor_proto(self, context: MethodDescriptorContext[T_contra]) -> None:
         for nested in self.__nested:
             nested.visit_method_descriptor_proto(context)
+
+    def enter_extension_descriptor_proto(self, context: ExtensionDescriptorContext[T_contra]) -> None:
+        pass
+
+    def leave_extension_descriptor_proto(self, context: ExtensionDescriptorContext[T_contra]) -> None:
+        for nested in self.__nested:
+            nested.visit_extension_descriptor_proto(context)

@@ -11,6 +11,7 @@ from pyprotostuben.protobuf.visitor.model import (
     DescriptorContext,
     EnumDescriptorContext,
     EnumValueDescriptorContext,
+    ExtensionDescriptorContext,
     FieldDescriptorContext,
     FileDescriptorContext,
     MethodDescriptorContext,
@@ -152,6 +153,20 @@ class Walker(ProtoVisitor[T_contra], LoggerMixin):
 
         log.info("visited")
 
+    def visit_extension_descriptor_proto(self, context: ExtensionDescriptorContext[T_contra]) -> None:
+        proto = context.proto
+
+        log = self._log.bind_details(proto_name=proto.name)
+        log.debug("entered")
+
+        for nested in self.__nested:
+            nested.enter_extension_descriptor_proto(context)
+
+        for nested in reversed(self.__nested):
+            nested.leave_extension_descriptor_proto(context)
+
+        log.info("visited")
+
     def walk(self, *files: FileDescriptorProto, meta: t.Optional[T_contra] = None) -> None:
         for file in files:
             self.visit_file_descriptor_proto(
@@ -252,8 +267,8 @@ class Walker(ProtoVisitor[T_contra], LoggerMixin):
 
     def __walk_extensions(self, context: t.Union[FileDescriptorContext[T_contra], DescriptorContext[T_contra]]) -> None:
         for i, ext in enumerate(context.proto.extension):
-            self.visit_field_descriptor_proto(
-                FieldDescriptorContext(
+            self.visit_extension_descriptor_proto(
+                ExtensionDescriptorContext(
                     _meta=context.meta,
                     parent=context,
                     proto=ext,

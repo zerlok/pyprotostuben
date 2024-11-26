@@ -126,3 +126,8 @@ class ServiceDescriptorContext(_ChildContext[M, ServiceDescriptorProto, FileDesc
 @dataclass()
 class MethodDescriptorContext(_ChildContext[M, MethodDescriptorProto, ServiceDescriptorProto]):
     pass
+
+
+@dataclass()
+class ExtensionDescriptorContext(_ChildContext[M, FieldDescriptorProto, t.Union[FileDescriptorProto, DescriptorProto]]):
+    pass

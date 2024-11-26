@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package foo;
+
+import "google/protobuf/descriptor.proto";
+
+option go_package = "some-go-package";
+
+message FooMsg {
+  int64 field1 = 1;
+  string field2 = 2;
+}
+
+extend google.protobuf.ServiceOptions {
+  optional FooMsg foo_service_option = 10042;
+}
+
+extend google.protobuf.MethodOptions {
+  optional FooMsg foo_method_option = 10042;
+}

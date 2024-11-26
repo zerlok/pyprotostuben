@@ -5,6 +5,7 @@ from pyprotostuben.protobuf.visitor.model import (
     DescriptorContext,
     EnumDescriptorContext,
     EnumValueDescriptorContext,
+    ExtensionDescriptorContext,
     FieldDescriptorContext,
     FileDescriptorContext,
     MethodDescriptorContext,
@@ -46,4 +47,8 @@ class ProtoVisitor(t.Generic[T_contra], metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def visit_method_descriptor_proto(self, context: MethodDescriptorContext[T_contra]) -> None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def visit_extension_descriptor_proto(self, context: ExtensionDescriptorContext[T_contra]) -> None:
         raise NotImplementedError

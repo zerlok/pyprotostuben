@@ -51,6 +51,15 @@ class MethodInfo:
 
 
 @dataclass()
+class ExtensionInfo:
+    name: str
+    doc: t.Optional[str]
+    annotation: ast.expr
+    default: t.Optional[ast.expr]
+    extended: TypeRef
+
+
+@dataclass()
 class ScopeInfo:
     enums: t.MutableSequence[EnumInfo] = field(default_factory=list)
     enum_values: t.MutableSequence[EnumValueInfo] = field(default_factory=list)
@@ -59,3 +68,4 @@ class ScopeInfo:
     fields: t.MutableSequence[FieldInfo] = field(default_factory=list)
     services: t.MutableSequence[ServiceInfo] = field(default_factory=list)
     methods: t.MutableSequence[MethodInfo] = field(default_factory=list)
+    extensions: t.MutableSequence[ExtensionInfo] = field(default_factory=list)

@@ -19,6 +19,10 @@ classifiers = [
     "Typing :: Typed",
 ]
 
+[tool.poetry.urls]
+Homepage = "https://github.com/zerlok/pyprotostuben"
+Issues = "https://github.com/zerlok/pyprotostuben/issues"
+
 [tool.poetry.scripts]
 protoc-gen-mypy-stub = "pyprotostuben.protoc:gen_mypy_stub"
 protoc-gen-brokrpc = "pyprotostuben.protoc:gen_brokrpc"
