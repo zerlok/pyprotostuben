@@ -125,6 +125,8 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
 
         parent.enum_values.append(
             EnumValueInfo(
+                name=proto.name,
+                value=proto.number,
                 body=parent.builder.build_enum_value_def(
                     name=proto.name,
                     doc=build_docstring(context.location),

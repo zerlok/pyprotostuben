@@ -4,7 +4,7 @@ from itertools import chain
 from google.protobuf.compiler.plugin_pb2 import CodeGeneratorRequest, CodeGeneratorResponse
 
 from pyprotostuben.codegen.abc import ProtocPlugin, ProtoFileGenerator
-from pyprotostuben.codegen.module_ast import ModuleASTBasedProtoFileGenerator
+from pyprotostuben.codegen.module_ast import ModuleAstProtoFileGenerator
 from pyprotostuben.codegen.mypy.builder import Pb2AstBuilder, Pb2GrpcAstBuilder
 from pyprotostuben.codegen.mypy.generator import MypyStubAstGenerator, MypyStubContext, MypyStubTrait
 from pyprotostuben.logging import LoggerMixin
@@ -56,7 +56,7 @@ class MypyStubFactory(MypyStubTrait):
         self.__registry = registry
 
     def create_generator(self) -> ProtoFileGenerator:
-        return ModuleASTBasedProtoFileGenerator(
+        return ModuleAstProtoFileGenerator(
             context_factory=self.create_visitor_context,
             visitor=MypyStubAstGenerator(self.__registry, self),
         )
@@ -76,6 +76,7 @@ class MypyStubFactory(MypyStubTrait):
             inner=ASTBuilder(ModuleDependencyResolver(module)),
             mutable=self.__params.has_flag("message-mutable"),
             all_init_args_optional=self.__params.has_flag("message-all-init-args-optional"),
+            include_descriptors=self.__params.has_flag("include-descriptors"),
         )
 
     def create_pb2_grpc_module(self, file: ProtoFile) -> ModuleInfo:

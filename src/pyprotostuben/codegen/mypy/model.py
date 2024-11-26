@@ -12,6 +12,8 @@ class EnumInfo:
 
 @dataclass()
 class EnumValueInfo:
+    name: str
+    value: int
     body: t.Sequence[ast.stmt]
 
 

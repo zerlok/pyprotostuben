@@ -5,7 +5,7 @@ from google.protobuf.compiler.plugin_pb2 import CodeGeneratorRequest, CodeGenera
 
 from pyprotostuben.codegen.abc import ProtocPlugin, ProtoFileGenerator
 from pyprotostuben.codegen.brokrpc.generator import BrokRPCContext, BrokRPCModuleGenerator
-from pyprotostuben.codegen.module_ast import ModuleASTBasedProtoFileGenerator
+from pyprotostuben.codegen.module_ast import ModuleAstProtoFileGenerator
 from pyprotostuben.logging import LoggerMixin
 from pyprotostuben.pool.abc import Pool
 from pyprotostuben.pool.process import MultiProcessPool, SingleProcessPool
@@ -37,7 +37,7 @@ class BrokRPCProtocPlugin(ProtocPlugin, LoggerMixin):
         return resp
 
     def __create_generator(self, context: CodeGeneratorContext) -> ProtoFileGenerator:
-        return ModuleASTBasedProtoFileGenerator(
+        return ModuleAstProtoFileGenerator(
             context_factory=_MultiProcessFuncs.create_visitor_context,
             visitor=BrokRPCModuleGenerator(registry=context.registry),
         )

@@ -21,7 +21,7 @@ class ModuleAstContext:
 T = t.TypeVar("T", bound=ModuleAstContext)
 
 
-class ModuleASTBasedProtoFileGenerator(t.Generic[T], ProtoFileGenerator, LoggerMixin):
+class ModuleAstProtoFileGenerator(t.Generic[T], ProtoFileGenerator, LoggerMixin):
     def __init__(self, context_factory: t.Callable[[ProtoFile], T], visitor: ProtoVisitorDecorator[T]) -> None:
         self.__context_factory = context_factory
         self.__walker = Walker(visitor)

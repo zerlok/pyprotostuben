@@ -10,6 +10,12 @@ def gen_mypy_stub() -> None:
 
 
 def gen_brokrpc() -> None:
+    # TODO: find a better way to load extension modules and parse custom options in protobuf files
+    # https://github.com/protocolbuffers/protobuf/issues/12049#issuecomment-1444187517
+    # from brokrpc.spec.v1 import amqp_pb2
+
+    # TODO: consider extensions usage during runtime, not codegen
+
     from pyprotostuben.codegen.brokrpc.plugin import BrokRPCProtocPlugin
 
     Logger.configure()
