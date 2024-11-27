@@ -1,5 +1,13 @@
 import functools as ft
 import typing as t
+
+if t.TYPE_CHECKING:
+    from typing_extensions import Self
+
+else:
+    Self = t.Any
+
+
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
@@ -85,5 +93,5 @@ class TypeInfo:
         return cls(ModuleInfo.from_str(type_.__module__), type_.__qualname__.split("."))
 
     @classmethod
-    def build(cls, module: t.Optional[ModuleInfo], *ns: str) -> "TypeInfo":
+    def build(cls, module: t.Optional[ModuleInfo], *ns: str) -> Self:
         return cls(module, ns)

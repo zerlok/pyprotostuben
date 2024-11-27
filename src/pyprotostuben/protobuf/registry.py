@@ -79,6 +79,7 @@ class TypeRegistry:
         assert not (self.__scalars.keys() & self.__message_types), "field type should be either scalar or message"
 
     def resolve_proto_field(self, field: FieldDescriptorProto) -> ProtoInfo:
+        info: t.Optional[ProtoInfo]
         if field.type not in self.__message_types:
             info = self.__scalars.get(field.type)
             if info is None:
