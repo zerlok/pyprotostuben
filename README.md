@@ -59,7 +59,7 @@ Saves protoc plugin input to a file. Helps develop protoc plugins.
 
 **plugin options:**
 
-* `format={binary|json}` (default = `json`) -- specify output format
+* `format={raw|binary|json}` (default = `raw`) -- specify output format
 * `dest={path}` (default = `request.json`) -- specify file destination
 
 ## examples
