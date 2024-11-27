@@ -1,5 +1,4 @@
 import abc
-import json
 import shutil
 import subprocess
 import typing as t
@@ -66,7 +65,7 @@ class DirCaseProvider(CaseProvider):
 
     def provide(self, tmp_path: Path) -> Case:
         dest = tmp_path / "request"
-        dest.mkdir()
+        dest.mkdir(exist_ok=True)
 
         request = read_request_buf(
             source=self.__proto_source,
@@ -88,36 +87,6 @@ class DirCaseProvider(CaseProvider):
         )
 
 
-def read_request_protoc(
-    source: Path,
-    dest: Path,
-    protos: t.Iterable[Path],
-) -> CodeGeneratorRequest:
-    protoc = shutil.which("protoc")
-    if not protoc:
-        pytest.fail("can't find protoc")
-
-    # NOTE: need to execute `protoc` that can be installed in local virtual env to get protoc plugin request to pass it
-    # to `CodeGeneratorPlugin` in tests.
-    echo_result = subprocess.run(  # noqa: S603
-        [
-            protoc,
-            f"-I{source}",
-            f"--echo_out={dest}",
-            *(str(proto) for proto in protos),
-        ],
-        stderr=subprocess.PIPE,
-        encoding="utf-8",
-        check=False,
-    )
-
-    if echo_result.returncode != 0:
-        pytest.fail(echo_result.stderr)
-
-    with (dest / "request.json").open("r") as echo_out:
-        return CodeGeneratorRequest(**json.load(echo_out))
-
-
 def read_request_buf(
     source: Path,
     dest: Path,
@@ -137,8 +106,7 @@ def read_request_buf(
         run_cmd(dest, buf, "dep", "update")
         run_cmd(dest, buf, "generate")
 
-    with (dest / "request.json").open("r") as request_fd:
-        return CodeGeneratorRequest(**json.load(request_fd))
+    return CodeGeneratorRequest.FromString((dest / "request.bin").read_bytes())
 
 
 def run_cmd(cwd: Path, *args: str) -> None:
