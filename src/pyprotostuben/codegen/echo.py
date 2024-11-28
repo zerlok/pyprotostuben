@@ -1,7 +1,7 @@
 import typing as t
 from pathlib import Path
 
-from google.protobuf.compiler.plugin_pb2 import CodeGeneratorRequest
+from google.protobuf.compiler.plugin_pb2 import CodeGeneratorRequest, CodeGeneratorResponse
 from google.protobuf.json_format import MessageToJson
 
 from pyprotostuben.logging import LoggerMixin
@@ -9,7 +9,7 @@ from pyprotostuben.protobuf.parser import ParameterParser
 
 
 class RequestEchoProtocPlugin(LoggerMixin):
-    def run(self, input_: t.IO[bytes]) -> None:
+    def run(self, input_: t.IO[bytes], output: t.IO[bytes]) -> None:
         input_content = input_.read()
         request = CodeGeneratorRequest.FromString(input_content)
 
@@ -40,3 +40,9 @@ class RequestEchoProtocPlugin(LoggerMixin):
             fd.write(content)
 
         log.info("request handled", dest=dest)
+
+        output.write(
+            CodeGeneratorResponse(
+                supported_features=CodeGeneratorResponse.Feature.FEATURE_PROTO3_OPTIONAL,
+            ).SerializeToString()
+        )

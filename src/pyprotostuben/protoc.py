@@ -22,4 +22,4 @@ def echo() -> None:
     from pyprotostuben.codegen.echo import RequestEchoProtocPlugin
 
     Logger.configure()
-    RequestEchoProtocPlugin().run(sys.stdin.buffer)
+    RequestEchoProtocPlugin().run(sys.stdin.buffer, sys.stdout.buffer)
