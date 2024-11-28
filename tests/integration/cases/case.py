@@ -1,14 +1,13 @@
 import abc
+import os
 import shutil
 import subprocess
 import typing as t
-from collections import OrderedDict
-from contextlib import contextmanager
 from dataclasses import dataclass
+from itertools import chain
 from pathlib import Path
 
 import pytest
-import yaml
 from google.protobuf.compiler.plugin_pb2 import CodeGeneratorRequest, CodeGeneratorResponse
 
 from pyprotostuben.codegen.abc import ProtocPlugin
@@ -35,6 +34,7 @@ class DirCaseProvider(CaseProvider):
         filename: str,
         plugin: ProtocPlugin,
         deps: t.Optional[t.Sequence[str]] = None,
+        deps_dir: t.Optional[Path] = None,
         parameter: t.Optional[str] = None,
         proto_source: t.Optional[str] = None,
         proto_paths: t.Optional[t.Sequence[str]] = None,
@@ -44,6 +44,7 @@ class DirCaseProvider(CaseProvider):
         self.__case_dir = Path(filename).parent
         self.__plugin = plugin
         self.__deps = deps
+        self.__deps_dir = deps_dir
         self.__parameter = parameter
 
         self.__proto_source = self.__case_dir / (proto_source or "proto")
@@ -64,13 +65,11 @@ class DirCaseProvider(CaseProvider):
         )
 
     def provide(self, tmp_path: Path) -> Case:
-        dest = tmp_path / "request"
-        dest.mkdir(exist_ok=True)
-
-        request = read_request_buf(
+        request = read_request_protoc(
             source=self.__proto_source,
-            dest=dest,
+            working_dir=tmp_path,
             deps=self.__deps,
+            deps_dir=self.__deps_dir if self.__deps_dir is not None else tmp_path / "deps",
             protos=self.__proto_paths,
         )
 
@@ -87,83 +86,65 @@ class DirCaseProvider(CaseProvider):
         )
 
 
-def read_request_buf(
+# TODO: find a way to run `buf generate`
+def read_request_protoc(
     source: Path,
-    dest: Path,
+    working_dir: Path,
     deps: t.Optional[t.Sequence[str]],
+    deps_dir: Path,
     protos: t.Sequence[Path],
 ) -> CodeGeneratorRequest:
+    protoc = shutil.which("protoc")
+    if not protoc:
+        pytest.fail("can't find protoc")
+
     buf = shutil.which("buf")
     if not buf:
         pytest.fail("can't find buf")
 
-    create_buf_config(dest, deps)
-    create_buf_gen_config(dest)
+    request_bin_path = working_dir / "request.bin"
+    request_bin_path.unlink(missing_ok=True)
 
-    with link_to_protos(source, dest, protos):
-        # NOTE: need to execute `buf` that can be installed in local virtual env to get buf plugin request to pass it
-        # to `CodeGeneratorPlugin` in tests. Before execution need to download deps before `buf generate`
-        run_cmd(dest, buf, "dep", "update")
-        run_cmd(dest, buf, "generate")
+    if not deps_dir.exists():
+        deps_dir.mkdir(parents=True, exist_ok=True)
+        for dep in deps or ():
+            run_cmd(working_dir, buf, "export", dep, "--output", str(deps_dir))
 
-    return CodeGeneratorRequest.FromString((dest / "request.bin").read_bytes())
+    run_cmd(working_dir, protoc, f"-I{source}", f"-I{deps_dir}", "--echo_out=.", *(str(proto) for proto in protos))
+
+    return CodeGeneratorRequest.FromString(request_bin_path.read_bytes())
 
 
-def run_cmd(cwd: Path, *args: str) -> None:
-    gen_result = subprocess.run(
+def run_cmd(working_dir: Path, *args: str) -> None:
+    cmd_result = subprocess.run(
         args=args,
-        cwd=cwd,
+        cwd=working_dir,
+        env={
+            # NOTE: this fixes `pluggy` coverage combine during pytest teardown.
+            "COVERAGE_PROCESS_START": "1",
+            # NOTE: forward values of PATH & PYTHONPATH so `protoc` can find local project plugins.
+            "PATH": os.getenv("PATH", ""),
+            "PYTHONPATH": os.getenv("PYTHONPATH", ""),
+        },
         stderr=subprocess.PIPE,
         encoding="utf-8",
         check=False,
     )
 
-    if gen_result.returncode != 0:
-        pytest.fail(gen_result.stderr)
+    if cmd_result.returncode != 0:
+        pytest.fail(_trim_lines(cmd_result.stderr))
 
 
-def create_buf_gen_config(dest: Path) -> Path:
-    buf_gen_config = dest / "buf.gen.yaml"
-    with buf_gen_config.open("w") as fd:
-        yaml.dump(
-            {
-                "version": "v2",
-                "plugins": [{"local": "protoc-gen-echo", "out": ".", "strategy": "all"}],
-            },
-            fd,
-        )
+def _trim_lines(value: str) -> str:
+    threshold = 16
+    lines = value.split("\n")
 
-    return buf_gen_config
+    if len(lines) <= threshold * 2:
+        return value
 
-
-def create_buf_config(dest: Path, deps: t.Optional[t.Sequence[str]]) -> Path:
-    buf_config = dest / "buf.yaml"
-
-    with buf_config.open("w") as fd:
-        yaml.dump(
-            {
-                "version": "v2",
-                "modules": [{"path": "."}],
-                "deps": list(deps or ()),
-            },
-            fd,
-        )
-
-    return buf_config
-
-
-@contextmanager
-def link_to_protos(source: Path, dest: Path, protos: t.Sequence[Path]) -> t.Iterator[t.Sequence[Path]]:
-    proto_links = OrderedDict([(proto, dest.joinpath(proto.relative_to(source))) for proto in protos])
-    try:
-        for proto, link in proto_links.items():
-            link.symlink_to(proto)
-
-        yield list(proto_links.values())
-
-    finally:
-        for link in proto_links.values():
-            link.unlink(missing_ok=True)
+    return "\n".join(
+        chain(lines[:threshold], (f"... (skipped {len(lines) - threshold * 2} lines)",), lines[-threshold:])
+    )
 
 
 def load_codegen_response_file_content(source: Path, path: Path) -> CodeGeneratorResponse.File:
