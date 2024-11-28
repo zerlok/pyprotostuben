@@ -44,6 +44,9 @@ BrokRPC = { version = "^0.2.0", python = ">=3.12,<4.0" }
 pyyaml = "^6.0.2"
 types-pyyaml = "^6.0.12.20240917"
 
+[tool.poetry.group.examples.dependencies]
+BrokRPC = { version = "^0.2.0", extras = ["aiormq"], python = ">=3.12,<4.0" }
+
 
 [build-system]
 requires = ["poetry-core"]

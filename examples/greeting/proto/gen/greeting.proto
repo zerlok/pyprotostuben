@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package greeting;
+
+import "brokrpc/spec/v1/amqp.proto";
+
+// the greet request
+message GreetRequest {
+  string name = 1;
+}
+
+// the greet response
+message GreetResponse {
+  string text = 1;
+}
+
+// the greeter service
+service Greeter {
+  option (brokrpc.spec.v1.exchange) = {
+    name: "greetings"
+    auto_delete: true
+  };
+
+  // the greet method
+  rpc Greet(GreetRequest) returns (GreetResponse) {
+    option (brokrpc.spec.v1.queue) = {auto_delete: true};
+  }
+}
