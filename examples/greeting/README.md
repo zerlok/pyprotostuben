@@ -7,6 +7,7 @@ System requirements:
 * [buf CLI](https://buf.build/product/cli) to generate code from protobuf files
 * [protoc](https://grpc.io/docs/protoc-installation/) to generate code from protobuf files
 * docker compose to run RabbitMQ broker
+* python 3.12 or higher
 
 Python requirements:
 

@@ -35,7 +35,7 @@ jobs:
           path: ./.venv
           key: venv-${{ hashFiles('poetry.lock') }}
       - name: Install the project dependencies
-        run: poetry install --all-extras
+        run: poetry install --without=examples --all-extras
       - name: Run mypy
         run: poetry run mypy
       - name: Run ruff check
@@ -70,7 +70,7 @@ jobs:
           path: ./.venv
           key: venv-${{ hashFiles('poetry.lock') }}
       - name: Install the project dependencies
-        run: poetry install --all-extras
+        run: poetry install --without=examples --all-extras
       - name: Download protoc ${{ matrix.protoc-version }}
         run: wget -q -O protoc.zip "https://github.com/protocolbuffers/protobuf/releases/download/v${{ matrix.protoc-version }}/protoc-${{ matrix.protoc-version }}-linux-x86_64.zip"
       - name: Unzip protoc ${{ matrix.protoc-version }}
