@@ -30,7 +30,7 @@ def test_multi_process_pool_can_be_run(
     "delays",
     [
         pytest.param(
-            [timedelta(milliseconds=i * 100) for i in reversed(range(os.cpu_count() or 0))],
+            [timedelta(milliseconds=i * 20) for i in reversed(range(os.cpu_count() or 0))],
         ),
     ],
 )

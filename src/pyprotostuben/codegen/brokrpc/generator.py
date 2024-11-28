@@ -4,8 +4,15 @@ from dataclasses import dataclass, field
 from functools import cached_property
 from itertools import chain
 
+# TODO: find a better way to load only used extension modules in file descriptor.
+#  https://github.com/protocolbuffers/protobuf/issues/12049#issuecomment-1444187517
+# NOTE: Extension modules must be preloaded, so protoc plugins can use it. Extensions are parsed with
+# CodeGeneratorRequest protobuf message and  passed to protoc plugin.
+from brokrpc.spec.v1 import amqp_pb2
+
 from pyprotostuben.codegen.module_ast import ModuleAstContext
 from pyprotostuben.logging import LoggerMixin
+from pyprotostuben.protobuf.extension import get_extension
 from pyprotostuben.protobuf.location import build_docstring
 from pyprotostuben.protobuf.registry import TypeRegistry
 from pyprotostuben.protobuf.visitor.abc import ProtoVisitorDecorator
@@ -35,6 +42,7 @@ class MethodInfo:
     server_input_streaming: bool
     server_output: TypeRef
     server_output_streaming: bool
+    amqp_queue_options: t.Optional[amqp_pb2.QueueOptions]
 
 
 @dataclass(frozen=True)
@@ -133,15 +141,26 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
         scope = context.meta
         parent = context.parent.meta
 
+        amqp_exchange_options = get_extension(proto, amqp_pb2.exchange)
         service_class_name = f"{proto.name}Service"
         client_class_name = f"{proto.name}Client"
 
         parent.services.append(
             ServiceInfo(
                 service=self.__build_service_def(context, service_class_name, scope.methods),
-                service_registrator=self.__build_service_registrator_def(context, service_class_name, scope.methods),
+                service_registrator=self.__build_service_registrator_def(
+                    context,
+                    service_class_name,
+                    amqp_exchange_options,
+                    scope.methods,
+                ),
                 client=self.__build_client_def(context, client_class_name, scope.methods),
-                client_factory=self.__build_client_factory_def(context, client_class_name, scope.methods),
+                client_factory=self.__build_client_factory_def(
+                    context,
+                    client_class_name,
+                    amqp_exchange_options,
+                    scope.methods,
+                ),
             ),
         )
 
@@ -161,6 +180,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
                 server_input_streaming=proto.client_streaming,
                 server_output=self.__registry.resolve_proto_method_server_output(proto),
                 server_output_streaming=proto.server_streaming,
+                amqp_queue_options=get_extension(proto, amqp_pb2.queue),
             )
         )
 
@@ -190,13 +210,13 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
     def __build_service_def(
         self,
         context: ServiceContext[BrokRPCContext],
-        name: str,
+        service_name: str,
         methods: t.Sequence[MethodInfo],
     ) -> ast.stmt:
         builder = context.meta.builder
 
         return builder.build_abstract_class_def(
-            name=name,
+            name=service_name,
             doc=build_docstring(context.location),
             body=[
                 builder.build_abstract_method_def(
@@ -218,17 +238,18 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
     def __build_service_registrator_def(
         self,
         context: ServiceContext[BrokRPCContext],
-        name: str,
+        service_name: str,
+        amqp_exchange_options: t.Optional[amqp_pb2.ExchangeOptions],
         methods: t.Sequence[MethodInfo],
     ) -> ast.stmt:
         builder = context.meta.builder
 
         return builder.build_func_def(
-            name=f"add_{camel2snake(name)}_to_server",
+            name=f"add_{camel2snake(service_name)}_to_server",
             args=[
                 builder.build_pos_arg(
                     name="service",
-                    annotation=builder.build_name(name),
+                    annotation=builder.build_name(service_name),
                 ),
                 builder.build_pos_arg(
                     name="server",
@@ -243,6 +264,8 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
                         "func": builder.build_name("service", method.name),
                         "routing_key": builder.build_const(method.qualname),
                         "serializer": self.__build_serializer(builder, method),
+                        "exchange": self.__build_exchange_options(builder, amqp_exchange_options),
+                        "queue": self.__build_queue_options(builder, method.qualname, method.amqp_queue_options),
                     },
                 )
                 for method in methods
@@ -252,13 +275,13 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
     def __build_client_def(
         self,
         context: ServiceContext[BrokRPCContext],
-        name: str,
+        client_name: str,
         methods: t.Sequence[MethodInfo],
     ) -> ast.stmt:
         builder = context.meta.builder
 
         return builder.build_class_def(
-            name=name,
+            name=client_name,
             doc=build_docstring(context.location),
             body=(
                 self.__build_client_init(builder, methods),
@@ -315,7 +338,8 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
     def __build_client_factory_def(
         self,
         context: ServiceContext[BrokRPCContext],
-        name: str,
+        client_name: str,
+        amqp_exchange_options: t.Optional[amqp_pb2.ExchangeOptions],
         methods: t.Sequence[MethodInfo],
     ) -> ast.stmt:
         builder = context.meta.builder
@@ -328,7 +352,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
                     annotation=builder.build_ref(self.__brokrpc_client),
                 ),
             ],
-            returns=builder.build_name(name),
+            returns=builder.build_name(client_name),
             is_async=True,
             is_context_manager=True,
             body=[
@@ -337,14 +361,14 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
                     items=[
                         (
                             method.name,
-                            self.__build_client_caller_factory(context, method),
+                            self.__build_client_caller_factory(context, amqp_exchange_options, method),
                         )
                         for method in methods
                     ],
                     body=[
                         builder.build_yield_stmt(
                             builder.build_call(
-                                func=builder.build_name(name),
+                                func=builder.build_name(client_name),
                                 kwargs={method.name: builder.build_name(method.name) for method in methods},
                             )
                         )
@@ -356,6 +380,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
     def __build_client_caller_factory(
         self,
         context: ServiceContext[BrokRPCContext],
+        amqp_exchange_options: t.Optional[amqp_pb2.ExchangeOptions],
         method: MethodInfo,
     ) -> ast.expr:
         builder = context.meta.builder
@@ -365,6 +390,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
             kwargs={
                 "routing_key": builder.build_const(method.qualname),
                 "serializer": self.__build_serializer(builder, method),
+                "exchange": self.__build_exchange_options(builder, amqp_exchange_options),
             },
         )
 
@@ -375,6 +401,66 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
                 method.server_input,
                 method.server_output,
             ],
+        )
+
+    def __build_exchange_options(
+        self,
+        builder: ASTBuilder,
+        amqp_exchange_options: t.Optional[amqp_pb2.ExchangeOptions],
+    ) -> ast.expr:
+        if amqp_exchange_options is None:
+            return builder.build_none_ref()
+
+        return builder.build_call(
+            func=builder.build_ref(self.__brokrpc_exchange_options),
+            kwargs={
+                "name": builder.build_const(
+                    amqp_exchange_options.name if amqp_exchange_options.HasField("name") else None
+                ),
+                "type": builder.build_const(
+                    self.__brokrpc_exchange_type_map[amqp_exchange_options.type]
+                    if amqp_exchange_options.HasField("type")
+                    else None
+                ),
+                "durable": builder.build_const(
+                    amqp_exchange_options.durable if amqp_exchange_options.HasField("durable") else None
+                ),
+                "auto_delete": builder.build_const(
+                    amqp_exchange_options.auto_delete if amqp_exchange_options.HasField("auto_delete") else None
+                ),
+            },
+        )
+
+    def __build_queue_options(
+        self,
+        builder: ASTBuilder,
+        method_qualname: str,
+        amqp_queue_options: t.Optional[amqp_pb2.QueueOptions],
+    ) -> ast.expr:
+        return builder.build_call(
+            func=builder.build_ref(self.__brokrpc_queue_options),
+            kwargs={
+                "name": builder.build_const(
+                    amqp_queue_options.name
+                    if amqp_queue_options is not None and amqp_queue_options.HasField("name")
+                    else method_qualname
+                ),
+                "durable": builder.build_const(
+                    amqp_queue_options.durable
+                    if amqp_queue_options is not None and amqp_queue_options.HasField("durable")
+                    else None
+                ),
+                "exclusive": builder.build_const(
+                    amqp_queue_options.exclusive
+                    if amqp_queue_options is not None and amqp_queue_options.HasField("exclusive")
+                    else None
+                ),
+                "auto_delete": builder.build_const(
+                    amqp_queue_options.auto_delete
+                    if amqp_queue_options is not None and amqp_queue_options.HasField("auto_delete")
+                    else None
+                ),
+            },
         )
 
     @cached_property
@@ -410,3 +496,21 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
         return TypeInfo.build(
             ModuleInfo(PackageInfo(self.__brokrpc, "serializer"), "protobuf"), "RPCProtobufSerializer"
         )
+
+    @cached_property
+    def __brokrpc_exchange_options(self) -> TypeInfo:
+        return TypeInfo.build(ModuleInfo(self.__brokrpc, "options"), "ExchangeOptions")
+
+    @cached_property
+    def __brokrpc_queue_options(self) -> TypeInfo:
+        return TypeInfo.build(ModuleInfo(self.__brokrpc, "options"), "QueueOptions")
+
+    @cached_property
+    def __brokrpc_exchange_type_map(self) -> t.Mapping[int, t.Optional[str]]:
+        return {
+            amqp_pb2.ExchangeType.EXCHANGE_TYPE_UNSPECIFIED: None,
+            amqp_pb2.ExchangeType.EXCHANGE_TYPE_DIRECT: "direct",
+            amqp_pb2.ExchangeType.EXCHANGE_TYPE_FANOUT: "fanout",
+            amqp_pb2.ExchangeType.EXCHANGE_TYPE_TOPIC: "topic",
+            amqp_pb2.ExchangeType.EXCHANGE_TYPE_HEADER: "header",
+        }

@@ -2,16 +2,26 @@ syntax = "proto3";
 
 package bar;
 
+import "brokrpc/spec/v1/amqp.proto";
 import "google/protobuf/descriptor.proto";
 import "google/protobuf/empty.proto";
 import "foo.proto";
 
 service BarService {
   option (foo.foo_service_option).field1 = 181;
+  option (brokrpc.spec.v1.exchange) = {
+    name: "bar-exchange-name",
+    type: EXCHANGE_TYPE_TOPIC,
+    auto_delete: true,
+  };
 
   rpc DoBar(google.protobuf.Empty) returns (google.protobuf.Empty) {
     option (foo.foo_method_option) = {
       field2: "field2-value"
+    };
+    option (brokrpc.spec.v1.queue) = {
+      name: "bar-queue-name",
+      durable: true,
     };
   }
 }

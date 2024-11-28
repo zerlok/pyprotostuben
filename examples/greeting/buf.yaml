@@ -1,0 +1,5 @@
+version: v2
+modules:
+  - path: proto
+deps:
+  - buf.build/zerlok/brokrpc:v0.2.1

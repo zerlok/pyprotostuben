@@ -1,3 +1,5 @@
+import sys
+
 from pyprotostuben.codegen.run import run_codegen
 from pyprotostuben.logging import Logger
 
@@ -20,4 +22,4 @@ def echo() -> None:
     from pyprotostuben.codegen.echo import RequestEchoProtocPlugin
 
     Logger.configure()
-    run_codegen(RequestEchoProtocPlugin())
+    RequestEchoProtocPlugin().run(sys.stdin.buffer, sys.stdout.buffer)

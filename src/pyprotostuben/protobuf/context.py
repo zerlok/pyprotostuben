@@ -91,7 +91,6 @@ class ContextBuilder(ProtoVisitor[BuildContext], LoggerMixin):
 
         context = BuildContext()
 
-        # TODO: consider `request.source_file_descriptors` usage to keep options
         walker.walk(*request.proto_file, meta=context)
 
         return CodeGeneratorContext(

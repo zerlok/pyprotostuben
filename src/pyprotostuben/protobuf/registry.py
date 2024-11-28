@@ -42,6 +42,10 @@ class RegistryError(Exception):
     pass
 
 
+class TypeNotFoundError(RegistryError):
+    pass
+
+
 class InvalidMessageInfoError(RegistryError):
     pass
 
@@ -75,11 +79,20 @@ class TypeRegistry:
         assert not (self.__scalars.keys() & self.__message_types), "field type should be either scalar or message"
 
     def resolve_proto_field(self, field: FieldDescriptorProto) -> ProtoInfo:
+        info: t.Optional[ProtoInfo]
         if field.type not in self.__message_types:
-            return self.__scalars[field.type]
+            info = self.__scalars.get(field.type)
+            if info is None:
+                raise TypeNotFoundError(field.type)
+
+            return info
 
         if field.type_name in self.__user_types:
-            return self.__user_types[field.type_name]
+            info = self.__user_types[field.type_name]
+            if info is None:
+                raise TypeNotFoundError(field.type_name)
+
+            return info
 
         return self.resolve_proto_map_entry(field.type_name)
 
@@ -90,14 +103,19 @@ class TypeRegistry:
         return self.resolve_proto_message(method.output_type)
 
     def resolve_proto_message(self, ref: str) -> MessageInfo:
-        info = self.__user_types[ref]
+        info = self.__user_types.get(ref)
+        if info is None:
+            raise TypeNotFoundError(ref)
+
         if not isinstance(info, MessageInfo):
             raise InvalidMessageInfoError(info, ref)
 
         return info
 
     def resolve_proto_map_entry(self, ref: str) -> MapEntryInfo:
-        map_entry = self.__map_entries[ref]
+        map_entry = self.__map_entries.get(ref)
+        if map_entry is None:
+            raise TypeNotFoundError(ref)
 
         key = self.resolve_proto_field(map_entry.key)
         if not isinstance(key, (ScalarInfo, EnumInfo, MessageInfo)):

@@ -1,8 +1,6 @@
 import typing as t
 
-from google.protobuf.descriptor_pb2 import (
-    FileDescriptorProto,
-)
+from google.protobuf.descriptor_pb2 import FileDescriptorProto
 
 from pyprotostuben.logging import LoggerMixin
 from pyprotostuben.protobuf.visitor.abc import ProtoVisitor, ProtoVisitorDecorator

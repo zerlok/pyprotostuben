@@ -1,0 +1,16 @@
+version: v2
+plugins:
+  # generates python protobuf message modules (the builtin protoc python codegen)
+  - protoc_builtin: python
+    out: src
+  # generates python gRPC modules
+  - remote: buf.build/grpc/python:v1.63.0
+    out: src
+  # generates python mypy stubs for protobuf messages (stub generator from pyprotostuben)
+  - local: protoc-gen-mypy-stub
+    out: src
+    strategy: all
+  # generates brokrpc files with server interface and client factory (also from pyprotostuben)
+  - local: protoc-gen-brokrpc
+    out: src
+    strategy: all
