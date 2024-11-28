@@ -9,7 +9,6 @@ from itertools import chain
 # NOTE: Extension modules must be preloaded, so protoc plugins can use it. Extensions are parsed with
 # CodeGeneratorRequest protobuf message and  passed to protoc plugin.
 from brokrpc.spec.v1 import amqp_pb2
-from google.protobuf.json_format import MessageToDict
 
 from pyprotostuben.codegen.module_ast import ModuleAstContext
 from pyprotostuben.logging import LoggerMixin
@@ -211,13 +210,13 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
     def __build_service_def(
         self,
         context: ServiceContext[BrokRPCContext],
-        name: str,
+        service_name: str,
         methods: t.Sequence[MethodInfo],
     ) -> ast.stmt:
         builder = context.meta.builder
 
         return builder.build_abstract_class_def(
-            name=name,
+            name=service_name,
             doc=build_docstring(context.location),
             body=[
                 builder.build_abstract_method_def(
@@ -239,18 +238,18 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
     def __build_service_registrator_def(
         self,
         context: ServiceContext[BrokRPCContext],
-        name: str,
+        service_name: str,
         amqp_exchange_options: t.Optional[amqp_pb2.ExchangeOptions],
         methods: t.Sequence[MethodInfo],
     ) -> ast.stmt:
         builder = context.meta.builder
 
         return builder.build_func_def(
-            name=f"add_{camel2snake(name)}_to_server",
+            name=f"add_{camel2snake(service_name)}_to_server",
             args=[
                 builder.build_pos_arg(
                     name="service",
-                    annotation=builder.build_name(name),
+                    annotation=builder.build_name(service_name),
                 ),
                 builder.build_pos_arg(
                     name="server",
@@ -266,7 +265,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
                         "routing_key": builder.build_const(method.qualname),
                         "serializer": self.__build_serializer(builder, method),
                         "exchange": self.__build_exchange_options(builder, amqp_exchange_options),
-                        "queue": self.__build_queue_options(builder, method.amqp_queue_options),
+                        "queue": self.__build_queue_options(builder, method.qualname, method.amqp_queue_options),
                     },
                 )
                 for method in methods
@@ -276,13 +275,13 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
     def __build_client_def(
         self,
         context: ServiceContext[BrokRPCContext],
-        name: str,
+        client_name: str,
         methods: t.Sequence[MethodInfo],
     ) -> ast.stmt:
         builder = context.meta.builder
 
         return builder.build_class_def(
-            name=name,
+            name=client_name,
             doc=build_docstring(context.location),
             body=(
                 self.__build_client_init(builder, methods),
@@ -339,7 +338,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
     def __build_client_factory_def(
         self,
         context: ServiceContext[BrokRPCContext],
-        name: str,
+        client_name: str,
         amqp_exchange_options: t.Optional[amqp_pb2.ExchangeOptions],
         methods: t.Sequence[MethodInfo],
     ) -> ast.stmt:
@@ -353,7 +352,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
                     annotation=builder.build_ref(self.__brokrpc_client),
                 ),
             ],
-            returns=builder.build_name(name),
+            returns=builder.build_name(client_name),
             is_async=True,
             is_context_manager=True,
             body=[
@@ -369,7 +368,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
                     body=[
                         builder.build_yield_stmt(
                             builder.build_call(
-                                func=builder.build_name(name),
+                                func=builder.build_name(client_name),
                                 kwargs={method.name: builder.build_name(method.name) for method in methods},
                             )
                         )
@@ -429,44 +428,36 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
                 "auto_delete": builder.build_const(
                     amqp_exchange_options.auto_delete if amqp_exchange_options.HasField("auto_delete") else None
                 ),
-                "arguments": builder.build_const(
-                    {
-                        key: MessageToDict(amqp_exchange_options, preserving_proto_field_name=True)
-                        for key, value in amqp_exchange_options.arguments.items()
-                    }
-                    if amqp_exchange_options.arguments
-                    else None
-                ),
             },
         )
 
     def __build_queue_options(
         self,
         builder: ASTBuilder,
+        method_qualname: str,
         amqp_queue_options: t.Optional[amqp_pb2.QueueOptions],
     ) -> ast.expr:
-        if amqp_queue_options is None:
-            return builder.build_none_ref()
-
         return builder.build_call(
             func=builder.build_ref(self.__brokrpc_queue_options),
             kwargs={
-                "name": builder.build_const(amqp_queue_options.name if amqp_queue_options.HasField("name") else None),
+                "name": builder.build_const(
+                    amqp_queue_options.name
+                    if amqp_queue_options is not None and amqp_queue_options.HasField("name")
+                    else method_qualname
+                ),
                 "durable": builder.build_const(
-                    amqp_queue_options.durable if amqp_queue_options.HasField("durable") else None
+                    amqp_queue_options.durable
+                    if amqp_queue_options is not None and amqp_queue_options.HasField("durable")
+                    else None
                 ),
                 "exclusive": builder.build_const(
-                    amqp_queue_options.exclusive if amqp_queue_options.HasField("exclusive") else None
+                    amqp_queue_options.exclusive
+                    if amqp_queue_options is not None and amqp_queue_options.HasField("exclusive")
+                    else None
                 ),
                 "auto_delete": builder.build_const(
-                    amqp_queue_options.auto_delete if amqp_queue_options.HasField("auto_delete") else None
-                ),
-                "arguments": builder.build_const(
-                    {
-                        key: MessageToDict(amqp_queue_options, preserving_proto_field_name=True)
-                        for key, value in amqp_queue_options.arguments.items()
-                    }
-                    if amqp_queue_options.arguments
+                    amqp_queue_options.auto_delete
+                    if amqp_queue_options is not None and amqp_queue_options.HasField("auto_delete")
                     else None
                 ),
             },

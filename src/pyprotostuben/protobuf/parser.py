@@ -11,10 +11,13 @@ class Parameter:
 class CodeGeneratorParameters:
     def __init__(self, params: t.Sequence[Parameter]) -> None:
         self.__params = params
-        self.__flags = [param.value for param in self.__params if param.name is None]
+        self.__flags = [param.value for param in self.__params if param.name is None and param.value]
         self.__named_params: t.Mapping[str, str] = {
             param.name: param.value for param in self.__params if param.name is not None
         }
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({self.__params!r})"
 
     def get_by_index(self, idx: int) -> str:
         return self.__params[idx].value
@@ -38,6 +41,9 @@ class CodeGeneratorParameters:
 class ParameterParser:
     def iter_parse(self, params: str) -> t.Iterable[Parameter]:
         for pair in params.split(","):
+            if not pair:
+                continue
+
             try:
                 name, value = pair.split("=", maxsplit=1)
 
