@@ -16,13 +16,19 @@ message GreetResponse {
 
 // the greeter service
 service Greeter {
+
+  // Set AMQP exchange options for Greeter service. This settings will be used to exchange RPC calls between RPC server
+  // & RPC client.
   option (brokrpc.spec.v1.exchange) = {
     name: "greetings"
-    auto_delete: true
+    auto_delete: true // see AMQP exchange auto delete flag
   };
 
   // the greet method
   rpc Greet(GreetRequest) returns (GreetResponse) {
+
+    // set AMQP queue options for Greeter service. This settings will be used to set up AMQP queue for RPC server where
+    // pending RPC requests will be stored.
     option (brokrpc.spec.v1.queue) = {auto_delete: true};
   }
 }
