@@ -7,8 +7,8 @@ from itertools import chain
 
 # NOTE: brokrpc supports python 3.12 or higher
 if sys.version_info >= (3, 12):
+    from brokrpc.spec.v1.amqp_pb2 import ExchangeOptions as AmqpExchangeOptions
     from brokrpc.spec.v1.amqp_pb2 import ExchangeType as AmqpExchangeType
-    from brokrpc.spec.v1.amqp_pb2 import ExhcnageOptions as AmqpExchangeOptions
     from brokrpc.spec.v1.amqp_pb2 import QueueOptions as AmqpQueueOptions
 
     # TODO: find a better way to load only used extension modules in file descriptor.
