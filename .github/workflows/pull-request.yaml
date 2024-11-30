@@ -86,5 +86,5 @@ jobs:
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          # upload coverage only on 3.12
-          dry_run: ${{ matrix.python-version != '3.12' }}
+          env_vars:
+            PYTHON: ${{ matrix.python-version }}
