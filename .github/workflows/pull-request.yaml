@@ -17,10 +17,10 @@ jobs:
         python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
     steps:
       - uses: actions/checkout@v4
-      - name: Install Python ${{ matrix.python_version }}
+      - name: Install Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
         with:
-          python-version: ${{ matrix.python_version }}
+          python-version: ${{ matrix.python-version }}
         # see details (matrix, python-version, python-version-file, etc.)
         # https://github.com/actions/setup-python
       - name: Install poetry
@@ -48,15 +48,15 @@ jobs:
       fail-fast: false
       # NOTE: be careful with coverage uploads when using matrix.
       matrix:
-        python_version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
-        protoc_version: [ "26.1" ]
-        buf_version: [ "1.38.0" ]
+        python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
+        protoc-version: [ "26.1" ]
+        buf-version: [ "1.38.0" ]
     steps:
       - uses: actions/checkout@v4
-      - name: Install Python ${{ matrix.python_version }}
+      - name: Install Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
         with:
-          python-version: ${{ matrix.python_version }}
+          python-version: ${{ matrix.python-version }}
         # see details (matrix, python-version, python-version-file, etc.)
         # https://github.com/actions/setup-python
       - name: Install poetry
@@ -72,13 +72,13 @@ jobs:
           key: venv-${{ hashFiles('poetry.lock') }}
       - name: Install the project dependencies
         run: poetry install --without=examples --all-extras
-      - name: Download protoc ${{ matrix.protoc_version }}
-        run: wget -q -O protoc.zip "https://github.com/protocolbuffers/protobuf/releases/download/v${{ matrix.protoc_version }}/protoc-${{ matrix.protoc_version }}-linux-x86_64.zip"
-      - name: Unzip protoc ${{ matrix.protoc_version }}
+      - name: Download protoc ${{ matrix.protoc-version }}
+        run: wget -q -O protoc.zip "https://github.com/protocolbuffers/protobuf/releases/download/v${{ matrix.protoc-version }}/protoc-${{ matrix.protoc-version }}-linux-x86_64.zip"
+      - name: Unzip protoc ${{ matrix.protoc-version }}
         run: unzip -q -n protoc.zip 'bin/*' 'include/google/protobuf/*' -d .venv
-      - name: Download buf ${{ matrix.buf_version }}
-        run: wget -q -O .venv/bin/buf "https://github.com/bufbuild/buf/releases/download/v${{ matrix.buf_version }}/buf-Linux-x86_64"
-      - name: Allow run buf ${{ matrix.buf_version }}
+      - name: Download buf ${{ matrix.buf-version }}
+        run: wget -q -O .venv/bin/buf "https://github.com/bufbuild/buf/releases/download/v${{ matrix.buf-version }}/buf-Linux-x86_64"
+      - name: Allow run buf ${{ matrix.buf-version }}
         run: chmod +x .venv/bin/buf
       - name: Run pytest
         run: poetry run pytest --cov-report=xml
@@ -87,4 +87,4 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           # upload coverage only on 3.12
-          dry_run: '${{ matrix.python_version != '3.12' }}'
+          dry_run: ${{ matrix.python-version != '3.12' }}
