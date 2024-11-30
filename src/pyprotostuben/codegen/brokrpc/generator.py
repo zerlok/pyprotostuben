@@ -1,14 +1,31 @@
 import ast
+import sys
 import typing as t
 from dataclasses import dataclass, field
 from functools import cached_property
 from itertools import chain
 
-# TODO: find a better way to load only used extension modules in file descriptor.
-#  https://github.com/protocolbuffers/protobuf/issues/12049#issuecomment-1444187517
-# NOTE: Extension modules must be preloaded, so protoc plugins can use it. Extensions are parsed with
-# CodeGeneratorRequest protobuf message and  passed to protoc plugin.
-from brokrpc.spec.v1 import amqp_pb2, consumer_pb2
+# NOTE: brokrpc supports python 3.12 or higher
+if sys.version_info >= (3, 12):
+    from brokrpc.spec.v1.amqp_pb2 import ExchangeOptions as AmqpExchangeOptions
+    from brokrpc.spec.v1.amqp_pb2 import ExchangeType as AmqpExchangeType
+    from brokrpc.spec.v1.amqp_pb2 import QueueOptions as AmqpQueueOptions
+
+    # TODO: find a better way to load only used extension modules in file descriptor.
+    #  https://github.com/protocolbuffers/protobuf/issues/12049#issuecomment-1444187517
+    # NOTE: Extension modules must be preloaded, so protoc plugins can use it. Extensions are parsed with
+    # `CodeGeneratorRequest` protobuf message and  passed to protoc plugin.
+    from brokrpc.spec.v1.amqp_pb2 import exchange as amqp_pb2_exchange_ext
+    from brokrpc.spec.v1.amqp_pb2 import queue as amqp_pb2_queue_ext
+    from brokrpc.spec.v1.consumer_pb2 import Void as AmqpConsumerVoid
+
+else:
+    AmqpExchangeType = t.Any
+    AmqpExchangeOptions = t.Any
+    AmqpQueueOptions = t.Any
+    amqp_pb2_exchange_ext = t.Any
+    amqp_pb2_queue_ext = t.Any
+    AmqpConsumerVoid = t.Any
 
 from pyprotostuben.codegen.module_ast import ModuleAstContext
 from pyprotostuben.logging import LoggerMixin
@@ -40,7 +57,7 @@ class _BaseMethodInfo:
     doc: t.Optional[str]
     server_input: TypeRef
     server_input_streaming: bool
-    amqp_queue_options: t.Optional[amqp_pb2.QueueOptions]
+    amqp_queue_options: t.Optional[AmqpQueueOptions]
 
 
 @dataclass(frozen=True)
@@ -153,7 +170,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
         scope = context.meta
         parent = context.parent.meta
 
-        amqp_exchange_options = get_extension(proto, amqp_pb2.exchange)
+        amqp_exchange_options = get_extension(proto, amqp_pb2_exchange_ext)
         service_name = proto.name
         client_name = f"{service_name}Client"
 
@@ -189,7 +206,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
         doc = build_docstring(context.location)
         server_input = self.__registry.resolve_proto_method_client_input(proto)
         server_output = self.__registry.resolve_proto_method_server_output(proto)
-        amqp_queue_options = get_extension(proto, amqp_pb2.queue)
+        amqp_queue_options = get_extension(proto, amqp_pb2_queue_ext)
 
         method: MethodInfo
         if server_output == self.__brokrpc_consumer_void:
@@ -289,7 +306,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
         self,
         context: ServiceContext[BrokRPCContext],
         service_name: str,
-        amqp_exchange_options: t.Optional[amqp_pb2.ExchangeOptions],
+        amqp_exchange_options: t.Optional[AmqpExchangeOptions],
         methods: t.Sequence[MethodInfo],
     ) -> ast.stmt:
         builder = context.meta.builder
@@ -317,7 +334,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
         self,
         builder: ASTBuilder,
         method: MethodInfo,
-        amqp_exchange_options: t.Optional[amqp_pb2.ExchangeOptions],
+        amqp_exchange_options: t.Optional[AmqpExchangeOptions],
     ) -> ast.stmt:
         func = builder.build_name("service", method.name)
         routing_key = builder.build_const(method.qualname)
@@ -459,7 +476,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
         context: ServiceContext[BrokRPCContext],
         service_name: str,
         client_name: str,
-        amqp_exchange_options: t.Optional[amqp_pb2.ExchangeOptions],
+        amqp_exchange_options: t.Optional[AmqpExchangeOptions],
         methods: t.Sequence[MethodInfo],
     ) -> ast.stmt:
         builder = context.meta.builder
@@ -500,7 +517,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
     def __build_client_caller_factory(
         self,
         context: ServiceContext[BrokRPCContext],
-        amqp_exchange_options: t.Optional[amqp_pb2.ExchangeOptions],
+        amqp_exchange_options: t.Optional[AmqpExchangeOptions],
         method: MethodInfo,
     ) -> ast.expr:
         builder = context.meta.builder
@@ -551,7 +568,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
     def __build_exchange_options(
         self,
         builder: ASTBuilder,
-        amqp_exchange_options: t.Optional[amqp_pb2.ExchangeOptions],
+        amqp_exchange_options: t.Optional[AmqpExchangeOptions],
     ) -> ast.expr:
         if amqp_exchange_options is None:
             return builder.build_none_ref()
@@ -580,7 +597,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
         self,
         builder: ASTBuilder,
         method_qualname: str,
-        amqp_queue_options: t.Optional[amqp_pb2.QueueOptions],
+        amqp_queue_options: t.Optional[AmqpQueueOptions],
     ) -> ast.expr:
         return builder.build_call(
             func=builder.build_ref(self.__brokrpc_queue_options),
@@ -677,13 +694,13 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
     @cached_property
     def __brokrpc_exchange_type_map(self) -> t.Mapping[int, t.Optional[str]]:
         return {
-            amqp_pb2.ExchangeType.EXCHANGE_TYPE_UNSPECIFIED: None,
-            amqp_pb2.ExchangeType.EXCHANGE_TYPE_DIRECT: "direct",
-            amqp_pb2.ExchangeType.EXCHANGE_TYPE_FANOUT: "fanout",
-            amqp_pb2.ExchangeType.EXCHANGE_TYPE_TOPIC: "topic",
-            amqp_pb2.ExchangeType.EXCHANGE_TYPE_HEADER: "header",
+            AmqpExchangeType.EXCHANGE_TYPE_UNSPECIFIED: None,
+            AmqpExchangeType.EXCHANGE_TYPE_DIRECT: "direct",
+            AmqpExchangeType.EXCHANGE_TYPE_FANOUT: "fanout",
+            AmqpExchangeType.EXCHANGE_TYPE_TOPIC: "topic",
+            AmqpExchangeType.EXCHANGE_TYPE_HEADER: "header",
         }
 
     @cached_property
     def __brokrpc_consumer_void(self) -> MessageInfo:
-        return MessageInfo.from_type(consumer_pb2.Void)
+        return MessageInfo.from_type(AmqpConsumerVoid)
