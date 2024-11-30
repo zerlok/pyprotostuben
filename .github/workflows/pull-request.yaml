@@ -46,6 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      # NOTE: be careful with coverage uploads when using matrix.
       matrix:
         python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
         protoc-version: [ "26.1" ]
@@ -84,4 +85,6 @@ jobs:
       - name: Upload results to Codecov
         uses: codecov/codecov-action@v4
         with:
+          # upload coverage only on 3.12
+          dry_run: '${{ matrix.python-version != '3.12' }}'
           token: ${{ secrets.CODECOV_TOKEN }}
