@@ -8,13 +8,13 @@ from itertools import chain
 #  https://github.com/protocolbuffers/protobuf/issues/12049#issuecomment-1444187517
 # NOTE: Extension modules must be preloaded, so protoc plugins can use it. Extensions are parsed with
 # CodeGeneratorRequest protobuf message and  passed to protoc plugin.
-from brokrpc.spec.v1 import amqp_pb2
+from brokrpc.spec.v1 import amqp_pb2, consumer_pb2
 
 from pyprotostuben.codegen.module_ast import ModuleAstContext
 from pyprotostuben.logging import LoggerMixin
 from pyprotostuben.protobuf.extension import get_extension
 from pyprotostuben.protobuf.location import build_docstring
-from pyprotostuben.protobuf.registry import TypeRegistry
+from pyprotostuben.protobuf.registry import MessageInfo, TypeRegistry
 from pyprotostuben.protobuf.visitor.abc import ProtoVisitorDecorator
 from pyprotostuben.protobuf.visitor.decorator import T_contra
 from pyprotostuben.protobuf.visitor.model import (
@@ -28,21 +28,33 @@ from pyprotostuben.protobuf.visitor.model import (
     OneofContext,
     ServiceContext,
 )
-from pyprotostuben.python.ast_builder import ASTBuilder, ModuleDependencyResolver, TypeRef
+from pyprotostuben.python.ast_builder import ASTBuilder, FuncArgInfo, ModuleDependencyResolver, TypeRef
 from pyprotostuben.python.info import ModuleInfo, PackageInfo, TypeInfo
 from pyprotostuben.string_case import camel2snake
 
 
 @dataclass(frozen=True)
-class MethodInfo:
+class _BaseMethodInfo:
     name: str
     qualname: str
     doc: t.Optional[str]
     server_input: TypeRef
     server_input_streaming: bool
+    amqp_queue_options: t.Optional[amqp_pb2.QueueOptions]
+
+
+@dataclass(frozen=True)
+class VoidMethodInfo(_BaseMethodInfo):
+    pass
+
+
+@dataclass(frozen=True)
+class ReplyingMethodInfo(_BaseMethodInfo):
     server_output: TypeRef
     server_output_streaming: bool
-    amqp_queue_options: t.Optional[amqp_pb2.QueueOptions]
+
+
+MethodInfo = t.Union[VoidMethodInfo, ReplyingMethodInfo]
 
 
 @dataclass(frozen=True)
@@ -142,24 +154,25 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
         parent = context.parent.meta
 
         amqp_exchange_options = get_extension(proto, amqp_pb2.exchange)
-        service_class_name = f"{proto.name}Service"
-        client_class_name = f"{proto.name}Client"
+        service_name = proto.name
+        client_name = f"{service_name}Client"
 
         parent.services.append(
             ServiceInfo(
-                service=self.__build_service_def(context, service_class_name, scope.methods),
+                service=self.__build_service_def(context, service_name, scope.methods),
                 service_registrator=self.__build_service_registrator_def(
-                    context,
-                    service_class_name,
-                    amqp_exchange_options,
-                    scope.methods,
+                    context=context,
+                    service_name=service_name,
+                    amqp_exchange_options=amqp_exchange_options,
+                    methods=scope.methods,
                 ),
-                client=self.__build_client_def(context, client_class_name, scope.methods),
+                client=self.__build_client_def(context, client_name, scope.methods),
                 client_factory=self.__build_client_factory_def(
-                    context,
-                    client_class_name,
-                    amqp_exchange_options,
-                    scope.methods,
+                    context=context,
+                    service_name=service_name,
+                    client_name=client_name,
+                    amqp_exchange_options=amqp_exchange_options,
+                    methods=scope.methods,
                 ),
             ),
         )
@@ -171,18 +184,37 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
         proto = context.proto
         parent = context.meta
 
-        parent.methods.append(
-            MethodInfo(
-                name=camel2snake(proto.name),
-                qualname=f"/{context.root.proto.package}/{context.parent.proto.name}/{proto.name}",
-                doc=build_docstring(context.location),
-                server_input=self.__registry.resolve_proto_method_client_input(proto),
+        name = camel2snake(proto.name)
+        qualname = f"/{context.root.proto.package}/{context.parent.proto.name}/{proto.name}"
+        doc = build_docstring(context.location)
+        server_input = self.__registry.resolve_proto_method_client_input(proto)
+        server_output = self.__registry.resolve_proto_method_server_output(proto)
+        amqp_queue_options = get_extension(proto, amqp_pb2.queue)
+
+        method: MethodInfo
+        if server_output == self.__brokrpc_consumer_void:
+            method = VoidMethodInfo(
+                name=name,
+                qualname=qualname,
+                doc=doc,
+                server_input=server_input,
                 server_input_streaming=proto.client_streaming,
-                server_output=self.__registry.resolve_proto_method_server_output(proto),
-                server_output_streaming=proto.server_streaming,
-                amqp_queue_options=get_extension(proto, amqp_pb2.queue),
+                amqp_queue_options=amqp_queue_options,
             )
-        )
+
+        else:
+            method = ReplyingMethodInfo(
+                name=name,
+                qualname=qualname,
+                doc=doc,
+                server_input=server_input,
+                server_input_streaming=proto.client_streaming,
+                server_output=server_output,
+                server_output_streaming=proto.server_streaming,
+                amqp_queue_options=amqp_queue_options,
+            )
+
+        parent.methods.append(method)
 
     def enter_extension(self, context: ExtensionContext[T_contra]) -> None:
         pass
@@ -218,22 +250,40 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
         return builder.build_abstract_class_def(
             name=service_name,
             doc=build_docstring(context.location),
-            body=[
-                builder.build_abstract_method_def(
-                    name=method.name,
-                    args=[
-                        builder.build_pos_arg(
-                            name="request",
-                            annotation=builder.build_generic_ref(self.__brokrpc_request, method.server_input),
-                        )
-                    ],
-                    returns=method.server_output,
-                    is_async=True,
-                    doc=method.doc,
-                )
-                for method in methods
-            ],
+            body=[self.__build_service_method_def(builder, method) for method in methods],
         )
+
+    def __build_service_method_def(self, builder: ASTBuilder, method: MethodInfo) -> ast.stmt:
+        if isinstance(method, VoidMethodInfo):
+            return builder.build_abstract_method_def(
+                name=method.name,
+                args=[
+                    builder.build_pos_arg(
+                        name="message",
+                        annotation=builder.build_generic_ref(self.__brokrpc_message, method.server_input),
+                    ),
+                ],
+                returns=self.__brokrpc_consumer_result,
+                is_async=True,
+                doc=method.doc,
+            )
+
+        elif isinstance(method, ReplyingMethodInfo):
+            return builder.build_abstract_method_def(
+                name=method.name,
+                args=[
+                    builder.build_pos_arg(
+                        name="request",
+                        annotation=builder.build_generic_ref(self.__brokrpc_request, method.server_input),
+                    ),
+                ],
+                returns=method.server_output,
+                is_async=True,
+                doc=method.doc,
+            )
+
+        else:
+            t.assert_never(method)
 
     def __build_service_registrator_def(
         self,
@@ -258,19 +308,49 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
             ],
             returns=builder.build_none_ref(),
             body=[
-                builder.build_call_stmt(
-                    func=builder.build_name("server", "register_unary_unary_handler"),
-                    kwargs={
-                        "func": builder.build_name("service", method.name),
-                        "routing_key": builder.build_const(method.qualname),
-                        "serializer": self.__build_serializer(builder, method),
-                        "exchange": self.__build_exchange_options(builder, amqp_exchange_options),
-                        "queue": self.__build_queue_options(builder, method.qualname, method.amqp_queue_options),
-                    },
-                )
+                self.__build_service_registrator_method_call(builder, method, amqp_exchange_options)
                 for method in methods
             ],
         )
+
+    def __build_service_registrator_method_call(
+        self,
+        builder: ASTBuilder,
+        method: MethodInfo,
+        amqp_exchange_options: t.Optional[amqp_pb2.ExchangeOptions],
+    ) -> ast.stmt:
+        func = builder.build_name("service", method.name)
+        routing_key = builder.build_const(method.qualname)
+        serializer = self.__build_serializer(builder, method)
+        exchange = self.__build_exchange_options(builder, amqp_exchange_options)
+        queue = self.__build_queue_options(builder, method.qualname, method.amqp_queue_options)
+
+        if isinstance(method, VoidMethodInfo):
+            return builder.build_call_stmt(
+                func=builder.build_name("server", "register_consumer"),
+                kwargs={
+                    "func": func,
+                    "routing_key": routing_key,
+                    "serializer": serializer,
+                    "exchange": exchange,
+                    "queue": queue,
+                },
+            )
+
+        elif isinstance(method, ReplyingMethodInfo):
+            return builder.build_call_stmt(
+                func=builder.build_name("server", "register_unary_unary_handler"),
+                kwargs={
+                    "func": func,
+                    "routing_key": routing_key,
+                    "serializer": serializer,
+                    "exchange": exchange,
+                    "queue": queue,
+                },
+            )
+
+        else:
+            t.assert_never(method)
 
     def __build_client_def(
         self,
@@ -285,23 +365,13 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
             doc=build_docstring(context.location),
             body=(
                 self.__build_client_init(builder, methods),
-                *(self.__build_client_call(builder, method) for method in methods),
+                *(self.__build_client_method_def(builder, method) for method in methods),
             ),
         )
 
     def __build_client_init(self, builder: ASTBuilder, methods: t.Sequence[MethodInfo]) -> ast.stmt:
         return builder.build_init_def(
-            args=[
-                builder.build_pos_arg(
-                    name=method.name,
-                    annotation=builder.build_generic_ref(
-                        self.__brokrpc_caller,
-                        method.server_input,
-                        method.server_output,
-                    ),
-                )
-                for method in methods
-            ],
+            args=[self.__build_client_init_arg(builder, method) for method in methods],
             body=[
                 builder.build_attr_assign(
                     "self",
@@ -312,32 +382,82 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
             ],
         )
 
-    def __build_client_call(self, builder: ASTBuilder, method: MethodInfo) -> ast.stmt:
-        return builder.build_method_def(
-            name=method.name,
-            args=[
-                builder.build_pos_arg(
-                    name="request",
-                    annotation=method.server_input,
+    def __build_client_init_arg(self, builder: ASTBuilder, method: MethodInfo) -> FuncArgInfo:
+        if isinstance(method, VoidMethodInfo):
+            return builder.build_pos_arg(
+                name=method.name,
+                annotation=builder.build_generic_ref(
+                    self.__brokrpc_publisher,
+                    method.server_input,
+                    self.__brokrpc_publisher_result,
                 ),
-            ],
-            returns=builder.build_generic_ref(self.__brokrpc_response, method.server_output),
-            doc=method.doc,
-            body=[
-                builder.build_return_stmt(
-                    builder.build_call(
-                        func=builder.build_name("self", f"__{method.name}", "invoke"),
-                        args=[builder.build_name("request")],
+            )
+
+        elif isinstance(method, ReplyingMethodInfo):
+            return builder.build_pos_arg(
+                name=method.name,
+                annotation=builder.build_generic_ref(
+                    self.__brokrpc_caller,
+                    method.server_input,
+                    method.server_output,
+                ),
+            )
+
+        else:
+            t.assert_never(method)
+
+    def __build_client_method_def(self, builder: ASTBuilder, method: MethodInfo) -> ast.stmt:
+        if isinstance(method, VoidMethodInfo):
+            return builder.build_method_def(
+                name=method.name,
+                args=[
+                    builder.build_pos_arg(
+                        name="message",
+                        annotation=method.server_input,
+                    ),
+                ],
+                returns=builder.build_none_ref(),
+                doc=method.doc,
+                body=[
+                    builder.build_call_stmt(
+                        func=builder.build_name("self", f"__{method.name}", "publish"),
+                        args=[builder.build_name("message")],
                         is_async=True,
-                    )
-                ),
-            ],
-            is_async=True,
-        )
+                    ),
+                ],
+                is_async=True,
+            )
+
+        elif isinstance(method, ReplyingMethodInfo):
+            return builder.build_method_def(
+                name=method.name,
+                args=[
+                    builder.build_pos_arg(
+                        name="request",
+                        annotation=method.server_input,
+                    ),
+                ],
+                returns=builder.build_generic_ref(self.__brokrpc_response, method.server_output),
+                doc=method.doc,
+                body=[
+                    builder.build_return_stmt(
+                        builder.build_call(
+                            func=builder.build_name("self", f"__{method.name}", "invoke"),
+                            args=[builder.build_name("request")],
+                            is_async=True,
+                        )
+                    ),
+                ],
+                is_async=True,
+            )
+
+        else:
+            t.assert_never(method)
 
     def __build_client_factory_def(
         self,
         context: ServiceContext[BrokRPCContext],
+        service_name: str,
         client_name: str,
         amqp_exchange_options: t.Optional[amqp_pb2.ExchangeOptions],
         methods: t.Sequence[MethodInfo],
@@ -345,7 +465,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
         builder = context.meta.builder
 
         return builder.build_func_def(
-            name="create_client",
+            name=f"create_{camel2snake(service_name)}_client",
             args=[
                 builder.build_pos_arg(
                     name="client",
@@ -385,23 +505,48 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
     ) -> ast.expr:
         builder = context.meta.builder
 
-        return builder.build_call(
-            func=builder.build_name("client", "unary_unary_caller"),
-            kwargs={
-                "routing_key": builder.build_const(method.qualname),
-                "serializer": self.__build_serializer(builder, method),
-                "exchange": self.__build_exchange_options(builder, amqp_exchange_options),
-            },
-        )
+        routing_key = builder.build_const(method.qualname)
+        serializer = self.__build_serializer(builder, method)
+        exchange = self.__build_exchange_options(builder, amqp_exchange_options)
+
+        if isinstance(method, VoidMethodInfo):
+            return builder.build_call(
+                func=builder.build_name("client", "publisher"),
+                kwargs={
+                    "routing_key": routing_key,
+                    "serializer": serializer,
+                    "exchange": exchange,
+                },
+            )
+
+        elif isinstance(method, ReplyingMethodInfo):
+            return builder.build_call(
+                func=builder.build_name("client", "unary_unary_caller"),
+                kwargs={
+                    "routing_key": routing_key,
+                    "serializer": serializer,
+                    "exchange": exchange,
+                },
+            )
+
+        else:
+            t.assert_never(method)
 
     def __build_serializer(self, builder: ASTBuilder, method: MethodInfo) -> ast.expr:
-        return builder.build_call(
-            func=builder.build_ref(self.__brokrpc_serializer),
-            args=[
-                method.server_input,
-                method.server_output,
-            ],
-        )
+        if isinstance(method, VoidMethodInfo):
+            return builder.build_call(
+                func=builder.build_ref(self.__brokrpc_serializer),
+                args=[method.server_input],
+            )
+
+        elif isinstance(method, ReplyingMethodInfo):
+            return builder.build_call(
+                func=builder.build_ref(self.__brokrpc_rpc_serializer),
+                args=[method.server_input, method.server_output],
+            )
+
+        else:
+            t.assert_never(method)
 
     def __build_exchange_options(
         self,
@@ -472,6 +617,22 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
         return PackageInfo(self.__brokrpc, "rpc")
 
     @cached_property
+    def __brokrpc_consumer(self) -> TypeInfo:
+        return TypeInfo.build(ModuleInfo(self.__brokrpc, "abc"), "Consumer")
+
+    @cached_property
+    def __brokrpc_consumer_result(self) -> TypeInfo:
+        return TypeInfo.build(ModuleInfo(self.__brokrpc, "model"), "ConsumerResult")
+
+    @cached_property
+    def __brokrpc_publisher(self) -> TypeInfo:
+        return TypeInfo.build(ModuleInfo(self.__brokrpc, "abc"), "Publisher")
+
+    @cached_property
+    def __brokrpc_publisher_result(self) -> TypeInfo:
+        return TypeInfo.build(ModuleInfo(self.__brokrpc, "model"), "PublisherResult")
+
+    @cached_property
     def __brokrpc_server(self) -> TypeInfo:
         return TypeInfo.build(ModuleInfo(self.__brokrpc_rpc, "server"), "Server")
 
@@ -484,6 +645,10 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
         return TypeInfo.build(ModuleInfo(self.__brokrpc_rpc, "abc"), "Caller")
 
     @cached_property
+    def __brokrpc_message(self) -> TypeInfo:
+        return TypeInfo.build(ModuleInfo(self.__brokrpc, "message"), "Message")
+
+    @cached_property
     def __brokrpc_request(self) -> TypeInfo:
         return TypeInfo.build(ModuleInfo(self.__brokrpc_rpc, "model"), "Request")
 
@@ -493,6 +658,10 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
 
     @cached_property
     def __brokrpc_serializer(self) -> TypeInfo:
+        return TypeInfo.build(ModuleInfo(PackageInfo(self.__brokrpc, "serializer"), "protobuf"), "ProtobufSerializer")
+
+    @cached_property
+    def __brokrpc_rpc_serializer(self) -> TypeInfo:
         return TypeInfo.build(
             ModuleInfo(PackageInfo(self.__brokrpc, "serializer"), "protobuf"), "RPCProtobufSerializer"
         )
@@ -514,3 +683,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
             amqp_pb2.ExchangeType.EXCHANGE_TYPE_TOPIC: "topic",
             amqp_pb2.ExchangeType.EXCHANGE_TYPE_HEADER: "header",
         }
+
+    @cached_property
+    def __brokrpc_consumer_void(self) -> MessageInfo:
+        return MessageInfo.from_type(consumer_pb2.Void)

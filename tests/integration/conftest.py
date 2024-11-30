@@ -10,7 +10,11 @@ from tests.integration.cases.case import Case, CaseProvider
 
 @pytest.fixture(
     params=[
-        pytest.param(obj, id=f"group={path.name}; name={name}")
+        pytest.param(
+            obj,
+            id=f"{obj.get_name()}/{name}",
+            marks=obj.get_marks(),
+        )
         for path in sorted(
             path
             for path in (Path(__file__).parent / "cases").iterdir()

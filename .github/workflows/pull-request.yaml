@@ -46,10 +46,14 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      # NOTE: be careful with coverage uploads when using matrix.
       matrix:
         python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
         protoc-version: [ "26.1" ]
         buf-version: [ "1.38.0" ]
+    env:
+      OS: ubuntu
+      PYTHON: ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@v4
       - name: Install Python ${{ matrix.python-version }}
@@ -85,3 +89,4 @@ jobs:
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          env_vars: OS,PYTHON

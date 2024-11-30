@@ -4,15 +4,15 @@
 
   main: |-
     from brokrpc.rpc.client import Client
-    from greeting_brokrpc import GreeterService, create_client
+    from greeting_brokrpc import Greeter, create_greeter_client
     
-    reveal_type(GreeterService) # N: Revealed type is "def () -> greeting_brokrpc.GreeterService"
+    reveal_type(Greeter) # N: Revealed type is "def () -> greeting_brokrpc.Greeter"
     
-    s: GreeterService
+    s: Greeter
     reveal_type(s.greet) # N: Revealed type is "def (request: brokrpc.message.Message[greeting_pb2.GreetRequest]) -> typing.Coroutine[Any, Any, greeting_pb2.GreetResponse]"
     
     async def main(client: Client) -> None:
-        async with create_client(client) as greeter_client:
+        async with create_greeter_client(client) as greeter_client:
             reveal_type(greeter_client) # N: Revealed type is "greeting_brokrpc.GreeterClient"
             reveal_type(greeter_client.greet) # N: Revealed type is "def (request: greeting_pb2.GreetRequest) -> typing.Coroutine[Any, Any, brokrpc.message.Message[greeting_pb2.GreetResponse]]"
 

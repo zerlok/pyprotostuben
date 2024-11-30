@@ -8,6 +8,7 @@ from logging import Formatter, LoggerAdapter, LogRecord, getLogger
 from logging.config import dictConfig
 from pathlib import Path
 
+# NOTE: this allows to use methods with `Self` during runtime (when typing_extensions is not installed).
 if t.TYPE_CHECKING:
     from typing_extensions import Self
 
