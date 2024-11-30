@@ -9,7 +9,7 @@ from itertools import chain
 from pathlib import Path
 
 import pytest
-from _pytest.mark import Mark
+from _pytest.mark import MarkDecorator
 from google.protobuf.compiler.plugin_pb2 import CodeGeneratorRequest, CodeGeneratorResponse
 
 from pyprotostuben.codegen.abc import ProtocPlugin
@@ -32,7 +32,7 @@ class CaseProvider(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def get_marks(self) -> t.Sequence[Mark]:
+    def get_marks(self) -> t.Sequence[MarkDecorator]:
         raise NotImplementedError
 
 
@@ -43,7 +43,7 @@ class DirCaseProvider(CaseProvider):
         *,
         filename: str,
         plugin: ProtocPlugin,
-        marks: t.Optional[t.Sequence[Mark]] = None,
+        marks: t.Optional[t.Sequence[MarkDecorator]] = None,
         deps: t.Optional[t.Sequence[str]] = None,
         deps_dir: t.Optional[Path] = None,
         parameter: t.Optional[str] = None,
@@ -100,7 +100,7 @@ class DirCaseProvider(CaseProvider):
     def get_name(self) -> str:
         return self.__case_dir.stem
 
-    def get_marks(self) -> t.Sequence[Mark]:
+    def get_marks(self) -> t.Sequence[MarkDecorator]:
         return self.__marks or ()
 
 
@@ -172,7 +172,7 @@ def load_codegen_response_file_content(source: Path, path: Path) -> CodeGenerato
     )
 
 
-def skip_if_module_not_found(qualname: str) -> Mark:
+def skip_if_module_not_found(qualname: str) -> MarkDecorator:
     try:
         import_module(qualname)
 
