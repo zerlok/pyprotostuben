@@ -1,4 +1,3 @@
-
 from pyprotostuben.codegen.brokrpc.plugin import BrokRPCProtocPlugin
 from pyprotostuben.codegen.mypy.plugin import MypyStubProtocPlugin
 from tests.integration.cases.case import DirCaseProvider, skip_if_module_not_found
