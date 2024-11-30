@@ -4,10 +4,12 @@ import shutil
 import subprocess
 import typing as t
 from dataclasses import dataclass
+from importlib import import_module
 from itertools import chain
 from pathlib import Path
 
 import pytest
+from _pytest.mark import Mark
 from google.protobuf.compiler.plugin_pb2 import CodeGeneratorRequest, CodeGeneratorResponse
 
 from pyprotostuben.codegen.abc import ProtocPlugin
@@ -25,6 +27,14 @@ class CaseProvider(metaclass=abc.ABCMeta):
     def provide(self, tmp_path: Path) -> Case:
         raise NotImplementedError
 
+    @abc.abstractmethod
+    def get_name(self) -> str:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def get_marks(self) -> t.Sequence[Mark]:
+        raise NotImplementedError
+
 
 class DirCaseProvider(CaseProvider):
     # NOTE: case provider constructor has many settings, no need to add extra class.
@@ -33,6 +43,7 @@ class DirCaseProvider(CaseProvider):
         *,
         filename: str,
         plugin: ProtocPlugin,
+        marks: t.Optional[t.Sequence[Mark]] = None,
         deps: t.Optional[t.Sequence[str]] = None,
         deps_dir: t.Optional[Path] = None,
         parameter: t.Optional[str] = None,
@@ -43,6 +54,7 @@ class DirCaseProvider(CaseProvider):
     ) -> None:
         self.__case_dir = Path(filename).parent
         self.__plugin = plugin
+        self.__marks = marks
         self.__deps = deps
         self.__deps_dir = deps_dir
         self.__parameter = parameter
@@ -84,6 +96,12 @@ class DirCaseProvider(CaseProvider):
                 for path in self.__expected_gen_paths
             ],
         )
+
+    def get_name(self) -> str:
+        return self.__case_dir.stem
+
+    def get_marks(self) -> t.Sequence[Mark]:
+        return self.__marks or ()
 
 
 # TODO: find a way to run `buf generate`
@@ -152,3 +170,16 @@ def load_codegen_response_file_content(source: Path, path: Path) -> CodeGenerato
         name=str(path.relative_to(source)),
         content=path.read_text(),
     )
+
+
+def skip_if_module_not_found(qualname: str) -> Mark:
+    try:
+        import_module(qualname)
+
+    except ImportError:
+        found = False
+
+    else:
+        found = True
+
+    return pytest.mark.skipif(not found, reason=f"module not found: {qualname}")

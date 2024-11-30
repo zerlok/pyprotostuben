@@ -77,7 +77,7 @@ ignore = [
 
 
 [tool.mypy]
-files = ["src", "tests", "examples"]
+files = ["src", "tests"]
 strict = true
 
 [[tool.mypy.overrides]]
