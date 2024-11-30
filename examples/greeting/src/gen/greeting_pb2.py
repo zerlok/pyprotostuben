@@ -23,9 +23,10 @@ _sym_db = _symbol_database.Default()
 
 
 from brokrpc.spec.v1 import amqp_pb2 as brokrpc_dot_spec_dot_v1_dot_amqp__pb2
+from brokrpc.spec.v1 import consumer_pb2 as brokrpc_dot_spec_dot_v1_dot_consumer__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x12gen/greeting.proto\x12\x08greeting\x1a\x1a\x62rokrpc/spec/v1/amqp.proto\"\"\n\x0cGreetRequest\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\"#\n\rGreetResponse\x12\x12\n\x04text\x18\x01 \x01(\tR\x04text2^\n\x07Greeter\x12@\n\x05Greet\x12\x16.greeting.GreetRequest\x1a\x17.greeting.GreetResponse\"\x06\xc2\xe2\x02\x02 \x01\x1a\x11\xc2\xe2\x02\r\n\tgreetings \x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x12gen/greeting.proto\x12\x08greeting\x1a\x1a\x62rokrpc/spec/v1/amqp.proto\x1a\x1e\x62rokrpc/spec/v1/consumer.proto\"\"\n\x0cGreetRequest\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\"#\n\rGreetResponse\x12\x12\n\x04text\x18\x01 \x01(\tR\x04text2\xa5\x01\n\x07Greeter\x12@\n\x05Greet\x12\x16.greeting.GreetRequest\x1a\x17.greeting.GreetResponse\"\x06\xc2\xe2\x02\x02 \x01\x12\x45\n\x0bNotifyGreet\x12\x17.greeting.GreetResponse\x1a\x15.brokrpc.spec.v1.Void\"\x06\xc2\xe2\x02\x02\x10\x01\x1a\x11\xc2\xe2\x02\r\n\tgreetings \x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -36,10 +37,12 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_GREETER']._serialized_options = b'\302\342\002\r\n\tgreetings \001'
   _globals['_GREETER'].methods_by_name['Greet']._loaded_options = None
   _globals['_GREETER'].methods_by_name['Greet']._serialized_options = b'\302\342\002\002 \001'
-  _globals['_GREETREQUEST']._serialized_start=60
-  _globals['_GREETREQUEST']._serialized_end=94
-  _globals['_GREETRESPONSE']._serialized_start=96
-  _globals['_GREETRESPONSE']._serialized_end=131
-  _globals['_GREETER']._serialized_start=133
-  _globals['_GREETER']._serialized_end=227
+  _globals['_GREETER'].methods_by_name['NotifyGreet']._loaded_options = None
+  _globals['_GREETER'].methods_by_name['NotifyGreet']._serialized_options = b'\302\342\002\002\020\001'
+  _globals['_GREETREQUEST']._serialized_start=92
+  _globals['_GREETREQUEST']._serialized_end=126
+  _globals['_GREETRESPONSE']._serialized_start=128
+  _globals['_GREETRESPONSE']._serialized_end=163
+  _globals['_GREETER']._serialized_start=166
+  _globals['_GREETER']._serialized_end=331
 # @@protoc_insertion_point(module_scope)

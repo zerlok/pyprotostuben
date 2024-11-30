@@ -2,6 +2,7 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 
+from brokrpc.spec.v1 import consumer_pb2 as brokrpc_dot_spec_dot_v1_dot_consumer__pb2
 from gen import greeting_pb2 as gen_dot_greeting__pb2
 
 
@@ -20,6 +21,11 @@ class GreeterStub(object):
                 request_serializer=gen_dot_greeting__pb2.GreetRequest.SerializeToString,
                 response_deserializer=gen_dot_greeting__pb2.GreetResponse.FromString,
                 _registered_method=True)
+        self.NotifyGreet = channel.unary_unary(
+                '/greeting.Greeter/NotifyGreet',
+                request_serializer=gen_dot_greeting__pb2.GreetResponse.SerializeToString,
+                response_deserializer=brokrpc_dot_spec_dot_v1_dot_consumer__pb2.Void.FromString,
+                _registered_method=True)
 
 
 class GreeterServicer(object):
@@ -33,6 +39,12 @@ class GreeterServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def NotifyGreet(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_GreeterServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -40,6 +52,11 @@ def add_GreeterServicer_to_server(servicer, server):
                     servicer.Greet,
                     request_deserializer=gen_dot_greeting__pb2.GreetRequest.FromString,
                     response_serializer=gen_dot_greeting__pb2.GreetResponse.SerializeToString,
+            ),
+            'NotifyGreet': grpc.unary_unary_rpc_method_handler(
+                    servicer.NotifyGreet,
+                    request_deserializer=gen_dot_greeting__pb2.GreetResponse.FromString,
+                    response_serializer=brokrpc_dot_spec_dot_v1_dot_consumer__pb2.Void.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -69,6 +86,33 @@ class Greeter(object):
             '/greeting.Greeter/Greet',
             gen_dot_greeting__pb2.GreetRequest.SerializeToString,
             gen_dot_greeting__pb2.GreetResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def NotifyGreet(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/greeting.Greeter/NotifyGreet',
+            gen_dot_greeting__pb2.GreetResponse.SerializeToString,
+            brokrpc_dot_spec_dot_v1_dot_consumer__pb2.Void.FromString,
             options,
             channel_credentials,
             insecure,

@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package foo;
+
+import "google/protobuf/descriptor.proto";
+import "brokrpc/spec/v1/consumer.proto";
+
+message Payload {}
+
+service FooService {
+  // this is a definition of publisher / consumer method (no response).
+  rpc NotifyFoo(Payload) returns (brokrpc.spec.v1.Void) {}
+}

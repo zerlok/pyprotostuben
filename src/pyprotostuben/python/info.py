@@ -1,6 +1,7 @@
 import functools as ft
 import typing as t
 
+# NOTE: this allows to use methods with `Self` during runtime (when typing_extensions is not installed).
 if t.TYPE_CHECKING:
     from typing_extensions import Self
 
@@ -84,12 +85,12 @@ class TypeInfo:
     ns: t.Sequence[str]
 
     @classmethod
-    def from_str(cls, ref: str) -> "TypeInfo":
+    def from_str(cls, ref: str) -> Self:
         module, ns = ref.split(":", maxsplit=1)
         return cls(ModuleInfo.from_str(module), ns.split("."))
 
     @classmethod
-    def from_type(cls, type_: type[object]) -> "TypeInfo":
+    def from_type(cls, type_: type[object]) -> Self:
         return cls(ModuleInfo.from_str(type_.__module__), type_.__qualname__.split("."))
 
     @classmethod

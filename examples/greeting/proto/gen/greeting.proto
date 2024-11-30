@@ -3,6 +3,7 @@ syntax = "proto3";
 package greeting;
 
 import "brokrpc/spec/v1/amqp.proto";
+import "brokrpc/spec/v1/consumer.proto";
 
 // the greet request
 message GreetRequest {
@@ -30,5 +31,9 @@ service Greeter {
     // set AMQP queue options for Greeter service. This settings will be used to set up AMQP queue for RPC server where
     // pending RPC requests will be stored.
     option (brokrpc.spec.v1.queue) = {auto_delete: true};
+  }
+
+  rpc NotifyGreet(GreetResponse) returns (brokrpc.spec.v1.Void) {
+    option (brokrpc.spec.v1.queue) = {durable: true};
   }
 }

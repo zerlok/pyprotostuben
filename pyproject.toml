@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pyprotostuben"
-version = "0.3.2"
+version = "0.3.3"
 description = "Generate Python MyPy stub modules from protobuf files."
 authors = ["zerlok <danil.troshnev@gmail.com>"]
 readme = "README.md"
@@ -77,7 +77,7 @@ ignore = [
 
 
 [tool.mypy]
-files = ["src", "tests"]
+files = ["src", "tests", "examples"]
 strict = true
 
 [[tool.mypy.overrides]]
