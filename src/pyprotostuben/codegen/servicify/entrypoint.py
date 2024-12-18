@@ -1,26 +1,18 @@
+from __future__ import annotations
+
 import importlib
 import inspect
+import sys
 import typing as t
 from collections import deque
-from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 
-from pyprotostuben.python.info import ModuleInfo, TypeInfo
+from pyprotostuben.codegen.servicify.model import EntrypointInfo, GroupInfo, MethodInfo
+from pyprotostuben.python.info import ModuleInfo
 
 P = t.ParamSpec("P")
 T = t.TypeVar("T")
-
-
-@dataclass(frozen=True, kw_only=True)
-class MethodInfo:
-    name: str
-    signature: inspect.Signature
-
-
-@dataclass(frozen=True, kw_only=True)
-class EntrypointInfo(TypeInfo):
-    methods: t.Sequence[MethodInfo]
-
 
 __ENTRYPOINT_MARK = f"""__{__name__.replace(".", "_")}_entrypoint__"""
 
@@ -34,37 +26,52 @@ def is_entrypoint(obj: object) -> bool:
     return hasattr(obj, __ENTRYPOINT_MARK)
 
 
-def inspect_package(path: Path) -> t.Iterable[EntrypointInfo]:
-    stack: t.Deque[Path] = deque([path])
+def inspect_source_dir(src: Path) -> t.Iterable[EntrypointInfo]:
+    sys.path.append(str(src))
+    try:
+        stack: t.Deque[Path] = deque([src])
 
-    while stack:
-        item = stack.pop()
+        while stack:
+            path = stack.pop()
 
-        if item.is_file() and item.suffix == ".py" and not item.stem.startswith("_"):
-            yield from inspect_module(item)
+            if path.is_file() and path.suffix == ".py" and not path.stem.startswith("_"):
+                module_path = path.relative_to(src)
+                module_qualname = ".".join(module_path.parts[:-1]) + f".{module_path.stem}"
+                module = importlib.import_module(module_qualname)
 
-        elif item.is_dir() and not item.stem.startswith("_"):
-            for subitem in item.iterdir():
-                stack.append(subitem)
+                yield inspect_module(module)
+
+            elif path.is_dir() and not path.stem.startswith("_"):
+                for subitem in path.iterdir():
+                    stack.append(subitem)
+
+    finally:
+        sys.path.remove(str(src))
 
 
-def inspect_module(path: Path) -> t.Iterable[EntrypointInfo]:
-    module_path = path.relative_to(Path.cwd())
-    module = importlib.import_module(".".join(module_path.parts[:-1]) + f".{module_path.stem}")
+def inspect_module(module: ModuleType) -> EntrypointInfo:
+    groups: t.List[GroupInfo] = []
 
     for name, obj in inspect.getmembers(module):
         if not is_entrypoint(obj):
             continue
 
-        yield EntrypointInfo(
-            module=ModuleInfo.from_module(module),
-            ns=[obj.__name__],
-            methods=[
-                MethodInfo(
-                    name=name,
-                    signature=inspect.signature(member),
-                )
-                for name, member in inspect.getmembers(obj)
-                if not name.startswith("_") and callable(member)
-            ],
+        groups.append(
+            GroupInfo(
+                name=name,
+                methods=[
+                    MethodInfo(
+                        name=name,
+                        signature=inspect.signature(member),
+                        doc=inspect.getdoc(member),
+                    )
+                    for name, member in inspect.getmembers(obj)
+                    if not name.startswith("_") and callable(member)
+                ],
+            )
         )
+
+    return EntrypointInfo(
+        module=ModuleInfo.from_module(module),
+        groups=groups,
+    )

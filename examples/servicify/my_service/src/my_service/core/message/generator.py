@@ -1,6 +1,6 @@
 import typing as t
 
-from core.greeter.abc import MessageGenerator
+from my_service.core.greeter.abc import MessageGenerator
 
 
 class FstringMessageGenerator(MessageGenerator):

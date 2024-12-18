@@ -1,5 +1,5 @@
-from core.greeter.abc import MessageGenerator
-from core.greeter.model import UserInfo
+from my_service.core.greeter.abc import MessageGenerator
+from my_service.core.greeter.model import UserInfo
 from pyprotostuben.codegen.servicify.entrypoint import entrypoint
 
 
@@ -9,4 +9,5 @@ class Greeter:
         self.__greeting = greeting
 
     def greet(self, user: UserInfo) -> str:
+        """Make a greeting message for a user."""
         return self.__greeting.gen_message({"username": user.name})

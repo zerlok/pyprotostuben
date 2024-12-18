@@ -9,5 +9,5 @@ pip install pyprotostuben[servicify]
 run
 
 ```shell
-servicify gen core fastapi
+servicify gen core brokrpc -o broker
 ```

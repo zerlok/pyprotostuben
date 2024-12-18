@@ -3,102 +3,131 @@ import inspect
 import itertools
 import typing as t
 from dataclasses import dataclass
-from pathlib import Path
 
-from pyprotostuben.codegen.servicify.entrypoint import EntrypointInfo, MethodInfo
+from pyprotostuben.codegen.servicify.abc import ServicifyCodeGenerator
+from pyprotostuben.codegen.servicify.model import EntrypointInfo, GeneratedFile, GeneratorContext, GroupInfo, MethodInfo
 from pyprotostuben.python.ast_builder import ASTBuilder, ModuleDependencyResolver
 from pyprotostuben.python.info import ModuleInfo, PackageInfo, TypeInfo
 from pyprotostuben.string_case import camel2snake, snake2camel
 
 
 @dataclass(frozen=True, kw_only=True)
-class GeneratorContext:
-    entrypoints: t.Sequence[EntrypointInfo]
-    output: Path
+class RPCMethodSpec:
+    package: PackageInfo
+    entrypoint: EntrypointInfo
+    group: GroupInfo
+    method: MethodInfo
+    request: TypeInfo
+    response: TypeInfo
+
+    @property
+    def parts(self) -> t.Sequence[str]:
+        return self.entrypoint.name, self.group.name, self.method.name
+
+    @property
+    def request_name(self) -> str:
+        return self.request.ns[0]
+
+    @property
+    def request_params(self) -> t.Sequence[inspect.Parameter]:
+        return list(self.method.signature.parameters.values())
+
+    @property
+    def response_name(self) -> str:
+        return self.response.ns[0]
+
+    @property
+    def response_param(self) -> inspect.Parameter:
+        return inspect.Parameter(
+            name=self.response_name,
+            kind=inspect.Parameter.POSITIONAL_ONLY,
+            annotation=self.method.signature.return_annotation,
+        )
 
 
-@dataclass(frozen=True, kw_only=True)
-class GeneratedFile:
-    path: Path
-    content: str
+class BrokRPCServicifyCodeGenerator(ServicifyCodeGenerator):
+    def generate(self, context: GeneratorContext) -> t.Sequence[GeneratedFile]:
+        package = PackageInfo(None, context.package or "brokrpc")
+        model_module = ModuleInfo(package, "model")
+        app_module = ModuleInfo(package, "app")
 
+        specs = [
+            RPCMethodSpec(
+                package=package,
+                entrypoint=entrypoint,
+                group=group,
+                method=method,
+                request=self.__build_method_type_info(model_module, entrypoint, group, method, "Request"),
+                response=self.__build_method_type_info(model_module, entrypoint, group, method, "Response"),
+            )
+            for entrypoint, group, method in context.iter_methods()
+        ]
 
-class ServicifyCodeGenerator:
-    def generate(self, context: GeneratorContext) -> t.Iterable[GeneratedFile]:
-        package = PackageInfo(None, "fastapi")
-
-        model_file, models_map = self.__build_models(context, package)
-        yield model_file
-        yield self.__build_app(context, package, models_map)
+        return [
+            self.__gen_package(context, package),
+            self.__build_models(context, model_module, specs),
+            self.__build_app(context, app_module, specs),
+        ]
 
     def __build_models(
         self,
         context: GeneratorContext,
-        package: PackageInfo,
-    ) -> tuple[GeneratedFile, t.Mapping[MethodInfo, tuple[TypeInfo, TypeInfo]]]:
-        info = ModuleInfo(package, "model")
+        info: ModuleInfo,
+        specs: t.Sequence[RPCMethodSpec],
+    ) -> GeneratedFile:
         builder = self.__get_builder(info)
 
-        model_map = {
-            method: (
-                TypeInfo(module=info, ns=[f"{entrypoint.ns[0]}{snake2camel(method.name.title())}Request"]),
-                TypeInfo(module=info, ns=[f"{entrypoint.ns[0]}{snake2camel(method.name.title())}Response"]),
-            )
-            for entrypoint in context.entrypoints
-            for method in entrypoint.methods
-        }
-
-        body = list(
-            itertools.chain.from_iterable(
-                (
-                    builder.build_class_def(
-                        name=model_map[method][0].ns[0],
-                        bases=[TypeInfo.from_str("pydantic:BaseModel")],
-                        body=[
-                            builder.build_attr_stub(
-                                name=param.name,
-                                annotation=TypeInfo.from_type(param.annotation),
-                            )
-                            for param in method.signature.parameters.values()
-                            if param.annotation is not inspect.Parameter.empty
-                        ],
-                    ),
-                    builder.build_class_def(
-                        name=model_map[method][1].ns[0],
-                        bases=[
-                            builder.build_generic_ref(
-                                TypeInfo.from_str("pydantic:RootModel"),
-                                TypeInfo.from_type(method.signature.return_annotation),
-                            ),
-                        ],
-                        body=[builder.build_pass_stmt()],
-                    ),
+        body = builder.build_module(
+            body=list(
+                itertools.chain.from_iterable(
+                    (
+                        builder.build_class_def(
+                            name=spec.request_name,
+                            bases=[TypeInfo.from_str("pydantic:BaseModel")],
+                            body=[
+                                builder.build_attr_stub(
+                                    name=param.name,
+                                    annotation=TypeInfo.from_type(param.annotation),
+                                )
+                                for param in spec.request_params
+                                if param.annotation is not inspect.Parameter.empty
+                            ],
+                        ),
+                        builder.build_class_def(
+                            name=spec.response_name,
+                            bases=[
+                                builder.build_generic_ref(
+                                    TypeInfo.from_str("pydantic:RootModel"),
+                                    TypeInfo.from_type(spec.response_param.annotation),
+                                ),
+                            ],
+                            body=[builder.build_pass_stmt()],
+                        ),
+                    )
+                    for spec in specs
                 )
-                for entrypoint in context.entrypoints
-                for method in entrypoint.methods
             )
         )
 
-        return self.__build_module(context, info, builder.build_module(body=body)), model_map
+        return self.__gen_module(context, info, body)
 
     def __build_app(
         self,
         context: GeneratorContext,
-        package: PackageInfo,
-        models_map: t.Mapping[MethodInfo, tuple[TypeInfo, TypeInfo]],
+        info: ModuleInfo,
+        specs: t.Sequence[RPCMethodSpec],
     ) -> GeneratedFile:
-        info = ModuleInfo(package, "app")
         builder = self.__get_builder(info)
 
         body = [
             builder.build_attr_assign("app", value=builder.build_call(func=TypeInfo.from_str("fastapi:FastAPI"))),
             *(
                 builder.build_func_def(
-                    name=f"{camel2snake(method.name)}_{camel2snake(entrypoint.ns[0])}",
+                    name="_".join(camel2snake(part) for part in reversed(spec.parts)),
                     decorators=[
                         builder.build_call(
                             func=builder.build_name("app", "post"),
-                            args=[builder.build_const("/".join(["", *entrypoint.module.parts, method.name]))],
+                            args=[builder.build_const("/" + "/".join(spec.parts))],
                         ),
                     ],
                     args=[
@@ -112,7 +141,7 @@ class ServicifyCodeGenerator:
                             "request_payload",
                             value=builder.build_call(
                                 func=ast.Attribute(
-                                    value=builder.build_ref(models_map[method][0]),
+                                    value=builder.build_ref(spec.request),
                                     attr="model_validate_json",
                                 ),
                                 args=[builder.build_call(func=builder.build_name("request", "read"), is_async=True)],
@@ -122,10 +151,10 @@ class ServicifyCodeGenerator:
                         builder.build_attr_assign(
                             "response_payload",
                             value=builder.build_call(
-                                func=builder.build_name("request", "state", entrypoint.ns[0], method.name),
+                                func=builder.build_name("request", "state", *spec.parts),
                                 kwargs={
                                     param.name: builder.build_name("request_payload", param.name)
-                                    for param in method.signature.parameters.values()
+                                    for param in spec.request_params
                                     if param.annotation is not inspect.Parameter.empty
                                 },
                             ),
@@ -133,7 +162,7 @@ class ServicifyCodeGenerator:
                         builder.build_return_stmt(
                             value=builder.build_call(
                                 func=ast.Attribute(
-                                    value=builder.build_ref(models_map[method][1]),
+                                    value=builder.build_ref(spec.response),
                                     attr="model_validate",
                                 ),
                                 args=[builder.build_name("response_payload")],
@@ -141,17 +170,42 @@ class ServicifyCodeGenerator:
                             ),
                         ),
                     ],
-                    returns=models_map[method][1],
+                    returns=spec.response,
                     is_async=True,
                 )
-                for entrypoint in context.entrypoints
-                for method in entrypoint.methods
+                for spec in specs
             ),
         ]
 
-        return self.__build_module(context, info, builder.build_module(body=body))
+        return self.__gen_module(context, info, builder.build_module(body=body))
 
-    def __build_module(self, context: GeneratorContext, info: ModuleInfo, body: ast.Module) -> GeneratedFile:
+    def __build_method_type_info(
+        self,
+        module: ModuleInfo,
+        entrypoint: EntrypointInfo,
+        group: GroupInfo,
+        method: MethodInfo,
+        name: str,
+    ) -> TypeInfo:
+        return TypeInfo(
+            module=module,
+            ns=[
+                "".join(
+                    snake2camel(part.title())
+                    for part in (
+                        entrypoint.name,
+                        group.name,
+                        method.name,
+                        name,
+                    )
+                ),
+            ],
+        )
+
+    def __gen_package(self, context: GeneratorContext, package: PackageInfo) -> GeneratedFile:
+        return self.__gen_module(context, ModuleInfo(package, "__init__"), ast.Module(body=[], type_ignores=[]))
+
+    def __gen_module(self, context: GeneratorContext, info: ModuleInfo, body: ast.Module) -> GeneratedFile:
         return GeneratedFile(path=context.output.joinpath(info.file), content=ast.unparse(body))
 
     def __get_builder(self, info: ModuleInfo) -> ASTBuilder:
