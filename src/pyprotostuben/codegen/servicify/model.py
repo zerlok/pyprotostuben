@@ -3,7 +3,7 @@ import typing as t
 from dataclasses import dataclass
 from pathlib import Path
 
-from pyprotostuben.python.info import ModuleInfo
+from pyprotostuben.python.info import ModuleInfo, TypeInfo
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -15,8 +15,12 @@ class MethodInfo:
 
 @dataclass(frozen=True, kw_only=True)
 class GroupInfo:
-    name: str
+    info: TypeInfo
     methods: t.Sequence[MethodInfo]
+
+    @property
+    def name(self) -> str:
+        return self.info.ns[0]
 
 
 @dataclass(frozen=True, kw_only=True)

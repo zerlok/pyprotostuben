@@ -9,7 +9,7 @@ from pathlib import Path
 from types import ModuleType
 
 from pyprotostuben.codegen.servicify.model import EntrypointInfo, GroupInfo, MethodInfo
-from pyprotostuben.python.info import ModuleInfo
+from pyprotostuben.python.info import ModuleInfo, TypeInfo
 
 P = t.ParamSpec("P")
 T = t.TypeVar("T")
@@ -26,7 +26,11 @@ def is_entrypoint(obj: object) -> bool:
     return hasattr(obj, __ENTRYPOINT_MARK)
 
 
-def inspect_source_dir(src: Path) -> t.Iterable[EntrypointInfo]:
+def inspect_source_dir(
+    src: Path,
+    *,
+    ignore_module_on_import_error: bool = False,
+) -> t.Iterable[EntrypointInfo]:
     sys.path.append(str(src))
     try:
         stack: t.Deque[Path] = deque([src])
@@ -37,9 +41,16 @@ def inspect_source_dir(src: Path) -> t.Iterable[EntrypointInfo]:
             if path.is_file() and path.suffix == ".py" and not path.stem.startswith("_"):
                 module_path = path.relative_to(src)
                 module_qualname = ".".join(module_path.parts[:-1]) + f".{module_path.stem}"
-                module = importlib.import_module(module_qualname)
 
-                yield inspect_module(module)
+                try:
+                    module = importlib.import_module(module_qualname)
+
+                except ImportError:
+                    if not ignore_module_on_import_error:
+                        raise
+
+                else:
+                    yield inspect_module(module)
 
             elif path.is_dir() and not path.stem.startswith("_"):
                 for subitem in path.iterdir():
@@ -50,6 +61,8 @@ def inspect_source_dir(src: Path) -> t.Iterable[EntrypointInfo]:
 
 
 def inspect_module(module: ModuleType) -> EntrypointInfo:
+    module_info = ModuleInfo.from_module(module)
+
     groups: t.List[GroupInfo] = []
 
     for name, obj in inspect.getmembers(module):
@@ -58,7 +71,7 @@ def inspect_module(module: ModuleType) -> EntrypointInfo:
 
         groups.append(
             GroupInfo(
-                name=name,
+                info=TypeInfo(module_info, ns=[name]),
                 methods=[
                     MethodInfo(
                         name=name,
@@ -72,6 +85,6 @@ def inspect_module(module: ModuleType) -> EntrypointInfo:
         )
 
     return EntrypointInfo(
-        module=ModuleInfo.from_module(module),
+        module=module_info,
         groups=groups,
     )

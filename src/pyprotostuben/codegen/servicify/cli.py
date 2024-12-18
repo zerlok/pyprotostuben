@@ -33,38 +33,53 @@ def cli(context: click.Context, working_dir: Path) -> None:
     )
 
 
-ARG_SRC = click.argument(
+ARG_SOURCE = click.argument(
     "src",
     type=click.Path(exists=True, readable=True, resolve_path=True, path_type=Path),
 )
 
-OPT_OUT = click.option(
+OPT_OUTPUT = click.option(
     "-o",
     "--output",
     type=click.Path(writable=True, resolve_path=True, path_type=Path),
     default=None,
 )
 
+OPT_IGNORE_MODULE_ON_IMPORT_ERROR = click.option(
+    "--ignore-module-on-import-error",
+    type=bool,
+    is_flag=True,
+    default=False,
+)
+
 
 @cli.command()
 @pass_cli_context
-@ARG_SRC
+@ARG_SOURCE
 @click.argument(
     "kind",
     type=click.Choice(["brokrpc"]),
 )
-@OPT_OUT
+@OPT_OUTPUT
 @click.option(
     "-p",
     "--package",
     type=str,
     default=None,
 )
-def gen(context: CLIContext, src: Path, kind: str, output: Path, package: t.Optional[str]) -> None:
+@OPT_IGNORE_MODULE_ON_IMPORT_ERROR
+def gen(
+    context: CLIContext,
+    src: Path,
+    kind: str,
+    output: Path,
+    package: t.Optional[str],
+    ignore_module_on_import_error: bool,
+) -> None:
     """Generate code for specified python package."""
 
     gen_context = GeneratorContext(
-        entrypoints=list(inspect_source_dir(src)),
+        entrypoints=list(inspect_source_dir(src, ignore_module_on_import_error=ignore_module_on_import_error)),
         output=output or src,
         package=package,
     )
@@ -77,11 +92,15 @@ def gen(context: CLIContext, src: Path, kind: str, output: Path, package: t.Opti
 
 
 @cli.command()
-@ARG_SRC
-def show(src: Path) -> None:
+@ARG_SOURCE
+@OPT_IGNORE_MODULE_ON_IMPORT_ERROR
+def show(
+    src: Path,
+    ignore_module_on_import_error: bool,
+) -> None:
     """Show info about the package"""
 
-    for entrypoint in inspect_source_dir(src):
+    for entrypoint in inspect_source_dir(src, ignore_module_on_import_error=ignore_module_on_import_error):
         if entrypoint.groups:
             click.echo(f"+ {entrypoint.module.qualname}")
 
