@@ -68,12 +68,19 @@ OPT_IGNORE_MODULE_ON_IMPORT_ERROR = click.option(
     default=None,
 )
 @OPT_IGNORE_MODULE_ON_IMPORT_ERROR
+@click.option(
+    "--dry-run",
+    type=bool,
+    is_flag=True,
+    default=False,
+)
 def gen(
     context: CLIContext,
     src: Path,
     kind: str,
     output: Path,
     package: t.Optional[str],
+    dry_run: bool,
     ignore_module_on_import_error: bool,
 ) -> None:
     """Generate code for specified python package."""
@@ -86,6 +93,9 @@ def gen(
 
     gen = BrokRPCServicifyCodeGenerator()
     for file in gen.generate(gen_context):
+        if dry_run:
+            continue
+
         file.path.parent.mkdir(parents=True, exist_ok=True)
         with file.path.open("w") as fd:
             fd.write(file.content)

@@ -39,7 +39,7 @@ class Pb2AstBuilder:
         # TODO: actual type is not fully compatible with IntEnum.
         #  See: https://github.com/nipunn1313/mypy-protobuf/issues/484
         result = [
-            self.__inner.build_attr_assign(
+            self.__inner.build_assign(
                 name,
                 value=self.__inner.build_const(value),
             ),
@@ -272,7 +272,7 @@ class Pb2GrpcAstBuilder:
                 args=[
                     self.__inner.build_pos_arg(
                         name="servicer",
-                        annotation=self.__inner.build_name(f"{name}Servicer"),
+                        annotation=self.__inner.build_attr(f"{name}Servicer"),
                     ),
                     self.__inner.build_pos_arg(
                         name="server",

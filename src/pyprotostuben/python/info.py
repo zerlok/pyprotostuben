@@ -87,11 +87,11 @@ class TypeInfo:
     @classmethod
     def from_str(cls, ref: str) -> Self:
         module, ns = ref.split(":", maxsplit=1)
-        return cls(ModuleInfo.from_str(module), ns.split("."))
+        return cls(ModuleInfo.from_str(module), tuple(ns.split(".")))
 
     @classmethod
     def from_type(cls, type_: type[object]) -> Self:
-        return cls(ModuleInfo.from_str(type_.__module__), type_.__qualname__.split("."))
+        return cls(ModuleInfo.from_str(type_.__module__), tuple(type_.__qualname__.split(".")))
 
     @classmethod
     def build(cls, module: t.Optional[ModuleInfo], *ns: str) -> Self:

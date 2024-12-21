@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import importlib
 import inspect
 import sys
@@ -71,8 +69,8 @@ def inspect_module(module: ModuleType) -> EntrypointInfo:
 
         groups.append(
             GroupInfo(
-                info=TypeInfo(module_info, ns=[name]),
-                methods=[
+                info=TypeInfo(module_info, ns=(name,)),
+                methods=tuple(
                     MethodInfo(
                         name=name,
                         signature=inspect.signature(member),
@@ -80,11 +78,11 @@ def inspect_module(module: ModuleType) -> EntrypointInfo:
                     )
                     for name, member in inspect.getmembers(obj)
                     if not name.startswith("_") and callable(member)
-                ],
+                ),
             )
         )
 
     return EntrypointInfo(
         module=module_info,
-        groups=groups,
+        groups=tuple(groups),
     )

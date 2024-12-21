@@ -316,7 +316,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
             args=[
                 builder.build_pos_arg(
                     name="service",
-                    annotation=builder.build_name(service_name),
+                    annotation=builder.build_attr(service_name),
                 ),
                 builder.build_pos_arg(
                     name="server",
@@ -336,7 +336,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
         method: MethodInfo,
         amqp_exchange_options: t.Optional[AmqpExchangeOptions],
     ) -> ast.stmt:
-        func = builder.build_name("service", method.name)
+        func = builder.build_attr("service", method.name)
         routing_key = builder.build_const(method.qualname)
         serializer = self.__build_serializer(builder, method)
         exchange = self.__build_exchange_options(builder, amqp_exchange_options)
@@ -344,7 +344,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
 
         if isinstance(method, VoidMethodInfo):
             return builder.build_call_stmt(
-                func=builder.build_name("server", "register_consumer"),
+                func=builder.build_attr("server", "register_consumer"),
                 kwargs={
                     "func": func,
                     "routing_key": routing_key,
@@ -356,7 +356,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
 
         elif isinstance(method, ReplyingMethodInfo):
             return builder.build_call_stmt(
-                func=builder.build_name("server", "register_unary_unary_handler"),
+                func=builder.build_attr("server", "register_unary_unary_handler"),
                 kwargs={
                     "func": func,
                     "routing_key": routing_key,
@@ -390,10 +390,10 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
         return builder.build_init_def(
             args=[self.__build_client_init_arg(builder, method) for method in methods],
             body=[
-                builder.build_attr_assign(
+                builder.build_assign(
                     "self",
                     f"__{method.name}",
-                    value=builder.build_name(method.name),
+                    value=builder.build_attr(method.name),
                 )
                 for method in methods
             ],
@@ -437,8 +437,8 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
                 doc=method.doc,
                 body=[
                     builder.build_call_stmt(
-                        func=builder.build_name("self", f"__{method.name}", "publish"),
-                        args=[builder.build_name("message")],
+                        func=builder.build_attr("self", f"__{method.name}", "publish"),
+                        args=[builder.build_attr("message")],
                         is_async=True,
                     ),
                 ],
@@ -459,8 +459,8 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
                 body=[
                     builder.build_return_stmt(
                         builder.build_call(
-                            func=builder.build_name("self", f"__{method.name}", "invoke"),
-                            args=[builder.build_name("request")],
+                            func=builder.build_attr("self", f"__{method.name}", "invoke"),
+                            args=[builder.build_attr("request")],
                             is_async=True,
                         )
                     ),
@@ -489,7 +489,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
                     annotation=builder.build_ref(self.__brokrpc_client),
                 ),
             ],
-            returns=builder.build_name(client_name),
+            returns=builder.build_attr(client_name),
             is_async=True,
             is_context_manager=True,
             body=[
@@ -505,8 +505,8 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
                     body=[
                         builder.build_yield_stmt(
                             builder.build_call(
-                                func=builder.build_name(client_name),
-                                kwargs={method.name: builder.build_name(method.name) for method in methods},
+                                func=builder.build_attr(client_name),
+                                kwargs={method.name: builder.build_attr(method.name) for method in methods},
                             )
                         )
                     ],
@@ -528,7 +528,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
 
         if isinstance(method, VoidMethodInfo):
             return builder.build_call(
-                func=builder.build_name("client", "publisher"),
+                func=builder.build_attr("client", "publisher"),
                 kwargs={
                     "routing_key": routing_key,
                     "serializer": serializer,
@@ -538,7 +538,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
 
         elif isinstance(method, ReplyingMethodInfo):
             return builder.build_call(
-                func=builder.build_name("client", "unary_unary_caller"),
+                func=builder.build_attr("client", "unary_unary_caller"),
                 kwargs={
                     "routing_key": routing_key,
                     "serializer": serializer,

@@ -90,9 +90,9 @@ class ASTBuilder:
 
         resolved = self.__resolver.resolve(ref)
 
-        return self.build_name(*(resolved.module.parts if resolved.module is not None else ()), *resolved.ns)
+        return self.build_attr(*(resolved.module.parts if resolved.module is not None else ()), *resolved.ns)
 
-    def build_name(self, head: str, *tail: str) -> ast.expr:
+    def build_attr(self, head: str, *tail: str) -> ast.expr:
         expr: ast.expr = ast.Name(id=head)
         for attr in tail:
             expr = ast.Attribute(attr=attr, value=expr)
@@ -131,17 +131,22 @@ class ASTBuilder:
         is_async: bool = False,
         is_context_manager: bool = False,
     ) -> ast.stmt:
-        head_decorators = [
-            TypeInfo.build(self.typing_module, "final") if is_final else None,
-            self.build_context_manager_decorator_ref(is_async=is_async) if is_context_manager else None,
-        ]
+        decorator_list = self._build_decorators(
+            [
+                TypeInfo.build(self.typing_module, "final") if is_final else None,
+            ],
+            decorators,
+            [
+                self.build_context_manager_decorator_ref(is_async=is_async) if is_context_manager else None,
+            ],
+        )
 
         if is_async:
             return ast.AsyncFunctionDef(  # type: ignore[call-overload,no-any-return,unused-ignore]
                 # type_comment and type_params has default value each in 3.12 and not available in 3.9
                 name=name,
                 args=self._build_func_args(args),
-                decorator_list=self._build_decorators(head_decorators, decorators),
+                decorator_list=decorator_list,
                 returns=self.build_iterator_ref(self.build_ref(returns), is_async=is_async)
                 if is_context_manager
                 else self.build_ref(returns),
@@ -153,7 +158,7 @@ class ASTBuilder:
         return ast.FunctionDef(  # type: ignore[call-overload,no-any-return,unused-ignore]
             # type_comment and type_params has default value each in 3.12 and not available in 3.9
             name=name,
-            decorator_list=self._build_decorators(head_decorators, decorators),
+            decorator_list=decorator_list,
             args=self._build_func_args(args),
             body=self._build_body(doc, body),
             returns=self.build_iterator_ref(self.build_ref(returns), is_async=is_async)
@@ -414,7 +419,7 @@ class ASTBuilder:
     ) -> ast.stmt:
         return self.build_method_stub(
             name=name,
-            decorators=[self.build_name(name, "setter")],
+            decorators=[self.build_attr(name, "setter")],
             args=[self.build_pos_arg(name="value", annotation=annotation)],
             returns=self.build_none_ref(),
             doc=doc,
@@ -436,6 +441,20 @@ class ASTBuilder:
             is_async=False,
         )
 
+    def build_init_attrs_def(
+        self,
+        args: t.Sequence[FuncArgInfo],
+        doc: t.Optional[str] = None,
+    ) -> ast.stmt:
+        return self.build_method_def(
+            name="__init__",
+            args=args,
+            body=[self.build_assign("self", f"__{arg.name}", value=self.build_attr(arg.name)) for arg in args],
+            returns=self.build_none_ref(),
+            doc=doc,
+            is_async=False,
+        )
+
     def build_init_stub(
         self,
         args: t.Sequence[FuncArgInfo],
@@ -444,14 +463,14 @@ class ASTBuilder:
         return self.build_init_def(args=args, body=self._build_stub_body(doc), doc=doc)
 
     @t.overload
-    def build_attr_assign(self, head: TypeRef, *, value: TypeRef) -> ast.stmt: ...
+    def build_assign(self, head: TypeRef, *, value: TypeRef) -> ast.stmt: ...
 
     @t.overload
-    def build_attr_assign(self, head: str, *tail: str, value: TypeRef) -> ast.stmt: ...
+    def build_assign(self, head: str, *tail: str, value: TypeRef) -> ast.stmt: ...
 
-    def build_attr_assign(self, head: t.Union[str, TypeRef], *tail: str, value: TypeRef) -> ast.stmt:
+    def build_assign(self, head: t.Union[str, TypeRef], *tail: str, value: TypeRef) -> ast.stmt:
         return ast.Assign(
-            targets=[self.build_ref(head) if isinstance(head, (ast.expr, TypeInfo)) else self.build_name(head, *tail)],
+            targets=[self.build_ref(head) if isinstance(head, (ast.expr, TypeInfo)) else self.build_attr(head, *tail)],
             value=self.build_ref(value),
             # NOTE: Seems like it is allowed to pass `None`, but ast typing says it's not.
             lineno=t.cast(int, None),
