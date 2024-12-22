@@ -1,3 +1,5 @@
+import typing as t
+
 from my_service.core.greeter.abc import MessageGenerator
 from my_service.core.greeter.model import UserInfo
 from pyprotostuben.codegen.servicify.entrypoint import entrypoint
@@ -15,3 +17,23 @@ class Greeter:
 
     def notify_greeted(self, user: UserInfo, message: str) -> None:
         self.__previous.append(message)
+
+
+@entrypoint(name="Users")
+class UserManager:
+    def __init__(self) -> None:
+        self.__users = set[UserInfo]()
+
+    def register(self, name: str) -> UserInfo:
+        """Make a greeting message for a user."""
+        user = UserInfo(name=name)
+        self.__users.add(user)
+
+        return user
+
+    def find_by_name(self, name: str) -> t.Optional[UserInfo]:
+        for user in self.__users:
+            if user.name == name:
+                return user
+
+        return None

@@ -5,10 +5,10 @@ import abc
 import ast
 import enum
 import typing as t
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cached_property
 
-from pyprotostuben.python.info import ModuleInfo, TypeInfo
+from pyprotostuben.python.info import ModuleInfo, PackageInfo, TypeInfo
 
 TypeRef = t.Union[ast.expr, TypeInfo]
 
@@ -733,3 +733,97 @@ class ASTBuilder:
                 t.cast(ast.stmt, ast.Constant(value=...))
             ]
         )
+
+
+@dataclass(kw_only=True)
+class ModuleContext:
+    info: ModuleInfo
+    builder: ASTBuilder
+    docs: list[str] = field(default_factory=list)
+    body: list[ast.stmt] = field(default_factory=list)
+
+
+class ModuleSubscriber(metaclass=abc.ABCMeta):
+    @abc.abstractmethod
+    def notify_module(self, info: ModuleInfo, content: ast.Module) -> None:
+        raise NotImplementedError
+
+
+class ModuleBuilder:
+    def __init__(self, info: ModuleInfo, *subscribers: ModuleSubscriber) -> None:
+        self.__context = ModuleContext(
+            info=info,
+            builder=ASTBuilder(ModuleDependencyResolver(info)),
+        )
+        self.__docs = list(docs)
+        self.__subscribers = set(subscribers)
+
+    @property
+    def builder(self) -> ASTBuilder:
+        return self.__context.
+
+    def subscribe(self, *subscribers: ModuleSubscriber) -> None:
+        self.__subscribers.update(subscribers)
+
+    def unsubscribe(self, *subscribers: ModuleSubscriber) -> None:
+        self.__subscribers.difference_update(subscribers)
+
+    def build_module(self, doc: t.Optional[str] = None, body: t.Optional[t.Sequence[ast.stmt]] = None) -> ast.Module:
+        module = super().build_module(doc, body)
+
+        for subscriber in self.__subscribers:
+            subscriber.notify_module(self.__info, module)
+
+        return module
+
+
+class PackageBuilder:
+    def __init__(self, root: t.Optional[PackageInfo] = None) -> None:
+        self.__root = root
+        self.__modules: dict[ModuleInfo, ModuleContext] = {}
+
+    def package(self, info: PackageInfo, doc: t.Optional[str] = None) -> ASTBuilder:
+        return self.module(ModuleInfo(info, "__init__"), doc)
+
+    def module(self, info: ModuleInfo, doc: t.Optional[str] = None) -> ASTBuilder:
+        context = self.__modules.get(info)
+
+        if context is None:
+            target = ModuleInfo(
+                parent=PackageInfo.build_or_none(
+                    *(self.__root.parts if self.__root is not None else ()),
+                    *info.package.parts,
+                ),
+                name=info.name,
+            )
+
+            context = self.__modules[info] = ModuleContext(
+                info=target,
+                builder=ASTBuilder(ModuleDependencyResolver(target)),
+            )
+
+        if doc:
+            context.docs.append(doc)
+
+        return context.builder
+
+    def extend(
+        self,
+        info: ModuleInfo,
+        *blocks: t.Optional[t.Union[ast.stmt, t.Iterable[t.Optional[ast.stmt]]]],
+    ) -> None:
+        if not blocks:
+            return
+
+        self.__modules[info].body.extend(
+            stmt
+            for block in blocks
+            if block
+            for stmt in (block if not isinstance(block, ast.stmt) else (block,))
+            if stmt is not None
+        )
+
+    def build(self) -> t.Iterable[tuple[ModuleInfo, ast.Module]]:
+        for context in self.__modules.values():
+            module_ast = context.builder.build_module(doc="\n".join(context.docs), body=context.body)
+            yield context.info, module_ast

@@ -1,3 +1,4 @@
+import inspect
 import typing as t
 from dataclasses import dataclass
 from pathlib import Path
@@ -53,12 +54,15 @@ OPT_IGNORE_MODULE_ON_IMPORT_ERROR = click.option(
 )
 
 
+GenKind = t.Literal["brokrpc"]
+
+
 @cli.command()
 @pass_cli_context
 @ARG_SOURCE
 @click.argument(
     "kind",
-    type=click.Choice(["brokrpc"]),
+    type=click.Choice(t.get_args(GenKind)),
 )
 @OPT_OUTPUT
 @click.option(
@@ -77,8 +81,8 @@ OPT_IGNORE_MODULE_ON_IMPORT_ERROR = click.option(
 def gen(
     context: CLIContext,
     src: Path,
-    kind: str,
-    output: Path,
+    kind: GenKind,
+    output: t.Optional[Path],
     package: t.Optional[str],
     dry_run: bool,
     ignore_module_on_import_error: bool,
@@ -87,7 +91,8 @@ def gen(
 
     gen_context = GeneratorContext(
         entrypoints=list(inspect_source_dir(src, ignore_module_on_import_error=ignore_module_on_import_error)),
-        output=output or src,
+        source=src,
+        output=src if output is None else output if output.is_absolute() else src.joinpath(output),
         package=package,
     )
 
@@ -111,17 +116,16 @@ def show(
     """Show info about the package"""
 
     for entrypoint in inspect_source_dir(src, ignore_module_on_import_error=ignore_module_on_import_error):
-        if entrypoint.groups:
-            click.echo(f"+ {entrypoint.module.qualname}")
+        if entrypoint.methods:
+            click.echo(
+                f"* {entrypoint.name} ({entrypoint.type_.module.qualname}:{'.'.join(entrypoint.type_.ns)}) "
+                f"{' ' if entrypoint.doc else ''}{entrypoint.doc or ''}"
+            )
 
-        for gi, group in enumerate(entrypoint.groups, start=1):
-            click.echo(f"{'|' if gi < len(entrypoint.groups) else '`'}---+ {group.name}")
-            for mi, method in enumerate(group.methods, start=1):
-                click.echo(f"    {'|' if mi < len(group.methods) else '`'}--- {method.name}{method.signature}")
-                if method.doc:
-                    click.echo(f"          {method.doc}")
+            for method in entrypoint.methods:
+                signature = inspect.Signature(parameters=method.params, return_annotation=method.returns.annotation)
+                click.echo(f"   * {method.name}{signature}: {method.doc or ''}")
 
-        if entrypoint.groups:
             click.echo("")
 
 
