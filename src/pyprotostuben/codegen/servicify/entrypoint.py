@@ -78,6 +78,7 @@ def inspect_source_dir(
                     stack.append(subitem)
 
     finally:
+        importlib.invalidate_caches()
         sys.path.remove(str(src))
 
 
@@ -109,10 +110,11 @@ def inspect_method(name: str, func: t.Callable[..., object]) -> MethodInfo:
         name=name,
         # skip `self`
         params=list(signature.parameters.values())[1:],
-        returns=inspect.Parameter(
-            name="returns",
-            kind=inspect.Parameter.POSITIONAL_ONLY,
-            annotation=signature.return_annotation,
-        ),
+        returns=signature.return_annotation,
+        # returns=inspect.Parameter(
+        #     name="returns",
+        #     kind=inspect.Parameter.POSITIONAL_ONLY,
+        #     annotation=signature.return_annotation,
+        # ),
         doc=inspect.getdoc(func),
     )

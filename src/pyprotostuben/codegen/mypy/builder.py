@@ -6,14 +6,14 @@ from itertools import chain
 
 from pyprotostuben.codegen.mypy.model import MethodInfo, ScopeInfo
 from pyprotostuben.protobuf.registry import MapEntryInfo, ProtoInfo
-from pyprotostuben.python.ast_builder import ASTBuilder, TypeRef
+from pyprotostuben.python.builder import ModuleASTBuilder, TypeRef
 from pyprotostuben.python.info import ModuleInfo, TypeInfo
 
 
 class Pb2AstBuilder:
     def __init__(
         self,
-        inner: ASTBuilder,
+        inner: ModuleASTBuilder,
         *,
         mutable: bool,
         all_init_args_optional: bool,
@@ -27,7 +27,7 @@ class Pb2AstBuilder:
     def build_enum_def(self, path: t.Sequence[str], doc: t.Optional[str], scope: ScopeInfo) -> ast.stmt:
         # TODO: actual type is not fully compatible with IntEnum.
         #  See: https://github.com/nipunn1313/mypy-protobuf/issues/484
-        return self.__inner.build_class_def(
+        return self.__inner.class_def(
             name=path[-1],
             bases=[self.__protobuf_enum_ref],
             doc=doc,
@@ -39,19 +39,19 @@ class Pb2AstBuilder:
         # TODO: actual type is not fully compatible with IntEnum.
         #  See: https://github.com/nipunn1313/mypy-protobuf/issues/484
         result = [
-            self.__inner.build_assign(
+            self.__inner.assign(
                 name,
-                value=self.__inner.build_const(value),
+                value=self.__inner.const(value),
             ),
         ]
 
         if doc:
-            result.append(self.__inner.build_docstring(doc))
+            result.append(self.__inner.docstring(doc))
 
         return result
 
     def build_message_def(self, path: t.Sequence[str], doc: t.Optional[str], scope: ScopeInfo) -> ast.stmt:
-        return self.__inner.build_class_def(
+        return self.__inner.class_def(
             name=path[-1],
             bases=[self.__protobuf_message_ref],
             doc=doc,
@@ -78,26 +78,26 @@ class Pb2AstBuilder:
             )
         )
 
-        return self.__inner.build_module(None, body)
+        return self.__inner.build(None, body)
 
     def build_type_ref(self, info: ProtoInfo) -> ast.expr:
         if isinstance(info, MapEntryInfo):
             return self.build_map_entry_ref(info.key, info.value)
 
-        return self.__inner.build_ref(info)
+        return self.__inner.ref(info)
 
     def build_map_entry_ref(self, key: TypeRef, value: TypeRef) -> ast.expr:
-        return self.__inner.build_generic_ref(self.__protobuf_map_entry_ref, key, value)
+        return self.__inner.mapping_ref(key, value, mutable=self.__mutable)
 
     def build_repeated_ref(self, inner: TypeRef) -> ast.expr:
-        return self.__inner.build_generic_ref(self.__protobuf_field_repeated_ref, inner)
+        return self.__inner.sequence_ref(inner, mutable=self.__mutable)
 
     def __build_descriptor_annotation(self, base: TypeRef) -> t.Sequence[ast.stmt]:
         if not self.__include_descriptors:
             return []
 
         return [
-            self.__inner.build_attr_stub(
+            self.__inner.attr_stub(
                 name="DESCRIPTOR",
                 annotation=base,
             ),
@@ -110,16 +110,16 @@ class Pb2AstBuilder:
         )
 
     def __build_message_init_stub(self, scope: ScopeInfo) -> ast.stmt:
-        return self.__inner.build_init_stub(
+        return self.__inner.init_stub(
             [
-                self.__inner.build_kw_arg(
+                self.__inner.kw_arg(
                     name=field.name,
-                    annotation=self.__inner.build_optional_ref(field.annotation)
+                    annotation=self.__inner.optional_ref(field.annotation)
                     if self.__all_init_args_optional or field.optional or field.oneof_group is not None
                     else field.annotation,
                     default=field.default
                     if field.default is not None
-                    else self.__inner.build_none_ref()
+                    else self.__inner.none_ref()
                     if self.__all_init_args_optional or field.optional or field.oneof_group is not None
                     else None,
                 )
@@ -130,68 +130,68 @@ class Pb2AstBuilder:
     def __build_message_field_stubs(self, scope: ScopeInfo) -> t.Iterable[ast.stmt]:
         return chain.from_iterable(
             (
-                self.__inner.build_property_getter_stub(name=field.name, annotation=field.annotation, doc=field.doc),
-                self.__inner.build_property_setter_stub(name=field.name, annotation=field.annotation),
+                self.__inner.property_getter_stub(name=field.name, annotation=field.annotation, doc=field.doc),
+                self.__inner.property_setter_stub(name=field.name, annotation=field.annotation),
             )
             if self.__mutable
-            else (self.__inner.build_property_getter_stub(name=field.name, annotation=field.annotation, doc=field.doc),)
+            else (self.__inner.property_getter_stub(name=field.name, annotation=field.annotation, doc=field.doc),)
             for field in scope.fields
         )
 
     def __build_protobuf_message_has_field_method_stub(self, scope: ScopeInfo) -> ast.stmt:
-        optional_field_names = [self.__inner.build_const(field.name) for field in scope.fields if field.optional]
+        optional_field_names = [self.__inner.const(field.name) for field in scope.fields if field.optional]
 
-        return self.__inner.build_method_stub(
+        return self.__inner.method_stub(
             name="HasField",
             args=[
-                self.__inner.build_pos_arg(
+                self.__inner.pos_arg(
                     name="field_name",
-                    annotation=self.__inner.build_literal_ref(*optional_field_names),
+                    annotation=self.__inner.literal_ref(*optional_field_names),
                 ),
             ],
-            returns=self.__inner.build_bool_ref() if optional_field_names else self.__inner.build_no_return_ref(),
+            returns=self.__inner.bool_ref() if optional_field_names else self.__inner.no_return_ref(),
         )
 
     def __build_which_oneof_method_stubs(self, scope: ScopeInfo) -> t.Iterable[ast.stmt]:
         oneofs = defaultdict[str, list[ast.expr]](list)
         for field in scope.fields:
             if field.oneof_group is not None:
-                oneofs[field.oneof_group].append(self.__inner.build_const(field.name))
+                oneofs[field.oneof_group].append(self.__inner.const(field.name))
 
         if not oneofs:
             return (
-                self.__inner.build_method_stub(
+                self.__inner.method_stub(
                     name="WhichOneof",
                     args=[
-                        self.__inner.build_pos_arg(
+                        self.__inner.pos_arg(
                             name="oneof_group",
-                            annotation=self.__inner.build_no_return_ref(),
+                            annotation=self.__inner.no_return_ref(),
                         ),
                     ],
-                    returns=self.__inner.build_no_return_ref(),
+                    returns=self.__inner.no_return_ref(),
                 ),
             )
 
         return (
-            self.__inner.build_method_stub(
+            self.__inner.method_stub(
                 name="WhichOneof",
-                decorators=[self.__inner.build_overload_ref()] if len(oneofs) > 1 else None,
+                decorators=[self.__inner.overload_ref()] if len(oneofs) > 1 else None,
                 args=[
-                    self.__inner.build_pos_arg(
+                    self.__inner.pos_arg(
                         name="oneof_group",
-                        annotation=self.__inner.build_literal_ref(ast.Constant(value=name)),
+                        annotation=self.__inner.literal_ref(ast.Constant(value=name)),
                     ),
                 ],
-                returns=self.__inner.build_optional_ref(self.__inner.build_literal_ref(*items)),
+                returns=self.__inner.optional_ref(self.__inner.literal_ref(*items)),
             )
             for name, items in oneofs.items()
         )
 
     def __build_extensions(self, scope: ScopeInfo) -> t.Sequence[ast.stmt]:
         return [
-            self.__inner.build_attr_stub(
+            self.__inner.attr_stub(
                 name=extension.name,
-                annotation=self.__inner.build_generic_ref(
+                annotation=self.__inner.generic_ref(
                     self.__protobuf_extension_descriptor_ref,
                     extension.extended,
                     extension.annotation,
@@ -210,14 +210,6 @@ class Pb2AstBuilder:
     def __protobuf_enum_ref(self) -> TypeInfo:
         # TODO: consider enum type wrapper usage `google.protobuf.internal.enum_type_wrapper.EnumTypeWrapper`
         return TypeInfo.build(ModuleInfo(None, "enum"), "IntEnum")
-
-    @cached_property
-    def __protobuf_field_repeated_ref(self) -> TypeInfo:
-        return TypeInfo.build(self.__inner.typing_module, "MutableSequence" if self.__mutable else "Sequence")
-
-    @cached_property
-    def __protobuf_map_entry_ref(self) -> TypeInfo:
-        return TypeInfo.build(self.__inner.typing_module, "MutableMapping" if self.__mutable else "Mapping")
 
     @cached_property
     def __protobuf_descriptor_module(self) -> ModuleInfo:
@@ -239,7 +231,7 @@ class Pb2AstBuilder:
 class Pb2GrpcAstBuilder:
     def __init__(
         self,
-        inner: ASTBuilder,
+        inner: ModuleASTBuilder,
         *,
         is_sync: bool,
         skip_servicer: bool,
@@ -255,7 +247,7 @@ class Pb2GrpcAstBuilder:
             return []
 
         return [
-            self.__inner.build_abstract_class_def(
+            self.__inner.abstract_class_def(
                 name=f"{name}Servicer",
                 doc=doc,
                 body=[self.__build_servicer_method_def(method) for method in scope.methods],
@@ -267,19 +259,19 @@ class Pb2GrpcAstBuilder:
             return []
 
         return [
-            self.__inner.build_func_stub(
+            self.__inner.func_stub(
                 name=f"add_{name}Servicer_to_server",
                 args=[
-                    self.__inner.build_pos_arg(
+                    self.__inner.pos_arg(
                         name="servicer",
-                        annotation=self.__inner.build_attr(f"{name}Servicer"),
+                        annotation=self.__inner.attr(f"{name}Servicer"),
                     ),
-                    self.__inner.build_pos_arg(
+                    self.__inner.pos_arg(
                         name="server",
                         annotation=self.__grpc_server_ref,
                     ),
                 ],
-                returns=self.__inner.build_none_ref(),
+                returns=self.__inner.none_ref(),
             )
         ]
 
@@ -288,7 +280,7 @@ class Pb2GrpcAstBuilder:
             return []
 
         return [
-            self.__inner.build_class_def(
+            self.__inner.class_def(
                 name=f"{name}Stub",
                 doc=doc,
                 body=list(
@@ -306,7 +298,7 @@ class Pb2GrpcAstBuilder:
                 chain(service.servicer, service.registrator, service.stub) for service in scope.services
             )
         )
-        return self.__inner.build_module(None, body)
+        return self.__inner.build(None, body)
 
     @cached_property
     def __grpc_streaming_generic(self) -> TypeInfo:
@@ -361,16 +353,16 @@ class Pb2GrpcAstBuilder:
     def __build_servicer_method_def(self, method: MethodInfo) -> ast.stmt:
         request, response = self.__build_servicer_method_inout_refs(method)
 
-        return self.__inner.build_abstract_method_stub(
+        return self.__inner.abstract_method_stub(
             name=method.name,
             args=[
-                self.__inner.build_pos_arg(
+                self.__inner.pos_arg(
                     name="request",
                     annotation=request,
                 ),
-                self.__inner.build_pos_arg(
+                self.__inner.pos_arg(
                     name="context",
-                    annotation=self.__inner.build_generic_ref(
+                    annotation=self.__inner.generic_ref(
                         self.__grpc_servicer_context_ref,
                         method.server_input,
                         method.server_output,
@@ -383,9 +375,9 @@ class Pb2GrpcAstBuilder:
         )
 
     def __build_stub_init_def(self) -> ast.stmt:
-        return self.__inner.build_init_stub(
+        return self.__inner.init_stub(
             args=[
-                self.__inner.build_pos_arg(
+                self.__inner.pos_arg(
                     name="channel",
                     annotation=self.__grpc_channel_ref,
                 ),
@@ -395,34 +387,34 @@ class Pb2GrpcAstBuilder:
     def __build_stub_method_def(self, info: MethodInfo) -> ast.stmt:
         request, response = self.__build_stub_method_inout_refs(info)
 
-        return self.__inner.build_method_stub(
+        return self.__inner.method_stub(
             name=info.name,
             args=[
-                self.__inner.build_pos_arg("request", request),
-                self.__inner.build_kw_arg(
+                self.__inner.pos_arg("request", request),
+                self.__inner.kw_arg(
                     name="timeout",
-                    annotation=self.__inner.build_optional_ref(self.__inner.build_float_ref()),
-                    default=self.__inner.build_none_ref(),
+                    annotation=self.__inner.optional_ref(self.__inner.float_ref()),
+                    default=self.__inner.none_ref(),
                 ),
-                self.__inner.build_kw_arg(
+                self.__inner.kw_arg(
                     name="metadata",
-                    annotation=self.__inner.build_optional_ref(self.__grpc_metadata_ref),
-                    default=self.__inner.build_none_ref(),
+                    annotation=self.__inner.optional_ref(self.__grpc_metadata_ref),
+                    default=self.__inner.none_ref(),
                 ),
-                self.__inner.build_kw_arg(
+                self.__inner.kw_arg(
                     name="credentials",
-                    annotation=self.__inner.build_optional_ref(self.__grpc_call_credentials_ref),
-                    default=self.__inner.build_none_ref(),
+                    annotation=self.__inner.optional_ref(self.__grpc_call_credentials_ref),
+                    default=self.__inner.none_ref(),
                 ),
-                self.__inner.build_kw_arg(
+                self.__inner.kw_arg(
                     name="wait_for_ready",
-                    annotation=self.__inner.build_optional_ref(self.__inner.build_bool_ref()),
-                    default=self.__inner.build_none_ref(),
+                    annotation=self.__inner.optional_ref(self.__inner.bool_ref()),
+                    default=self.__inner.none_ref(),
                 ),
-                self.__inner.build_kw_arg(
+                self.__inner.kw_arg(
                     name="compression",
-                    annotation=self.__inner.build_optional_ref(self.__grpc_compression_ref),
-                    default=self.__inner.build_none_ref(),
+                    annotation=self.__inner.optional_ref(self.__grpc_compression_ref),
+                    default=self.__inner.none_ref(),
                 ),
             ],
             returns=response,
@@ -461,7 +453,7 @@ class Pb2GrpcAstBuilder:
         if not info.server_input_streaming and not info.server_output_streaming:
             return (
                 self.__build_message_ref(info.server_input),
-                self.__inner.build_generic_ref(
+                self.__inner.generic_ref(
                     self.__grpc_unary_unary_call_ref,
                     info.server_input,
                     info.server_output,
@@ -471,7 +463,7 @@ class Pb2GrpcAstBuilder:
         if not info.server_input_streaming and info.server_output_streaming:
             return (
                 self.__build_message_ref(info.server_input),
-                self.__inner.build_generic_ref(
+                self.__inner.generic_ref(
                     self.__grpc_unary_stream_call_ref,
                     info.server_input,
                     info.server_output,
@@ -481,7 +473,7 @@ class Pb2GrpcAstBuilder:
         if info.server_input_streaming and not info.server_output_streaming:
             return (
                 self.__build_streaming_ref(info.server_input),
-                self.__inner.build_generic_ref(
+                self.__inner.generic_ref(
                     self.__grpc_stream_unary_call_ref,
                     info.server_input,
                     info.server_output,
@@ -491,7 +483,7 @@ class Pb2GrpcAstBuilder:
         if info.server_input_streaming and info.server_output_streaming:
             return (
                 self.__build_streaming_ref(info.server_input),
-                self.__inner.build_generic_ref(
+                self.__inner.generic_ref(
                     self.__grpc_stream_stream_call_ref,
                     info.server_input,
                     info.server_output,
@@ -502,7 +494,7 @@ class Pb2GrpcAstBuilder:
         raise ValueError(msg, info)
 
     def __build_message_ref(self, ref: TypeRef) -> ast.expr:
-        return self.__inner.build_ref(ref)
+        return self.__inner.ref(ref)
 
     def __build_streaming_ref(self, inner: TypeRef) -> ast.expr:
-        return self.__inner.build_generic_ref(self.__grpc_streaming_generic, inner)
+        return self.__inner.generic_ref(self.__grpc_streaming_generic, inner)

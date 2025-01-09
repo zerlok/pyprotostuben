@@ -10,7 +10,7 @@ from pyprotostuben.python.info import TypeInfo
 class MethodInfo:
     name: str
     params: t.Sequence[inspect.Parameter]
-    returns: inspect.Parameter
+    returns: type[object] | None
     doc: t.Optional[str]
 
 

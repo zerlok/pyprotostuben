@@ -25,8 +25,8 @@ class UserManager:
         self.__users = set[UserInfo]()
 
     def register(self, name: str) -> UserInfo:
-        """Make a greeting message for a user."""
-        user = UserInfo(name=name)
+        """Register user with provided name."""
+        user = UserInfo(id_=len(self.__users) + 1, name=name)
         self.__users.add(user)
 
         return user

@@ -6,7 +6,7 @@ from pathlib import Path
 import click
 
 from pyprotostuben.codegen.servicify.entrypoint import inspect_source_dir
-from pyprotostuben.codegen.servicify.generator import BrokRPCServicifyCodeGenerator
+from pyprotostuben.codegen.servicify.generator.aiohttp import AiohttpServicifyCodeGenerator
 from pyprotostuben.codegen.servicify.model import GeneratorContext
 
 
@@ -27,8 +27,6 @@ pass_cli_context = click.make_pass_decorator(CLIContext)
     default=Path.cwd(),
 )
 def cli(context: click.Context, working_dir: Path) -> None:
-    # sys.path.append(str(working_dir.cwd()))
-
     context.obj = CLIContext(
         working_dir=working_dir,
     )
@@ -96,7 +94,8 @@ def gen(
         package=package,
     )
 
-    gen = BrokRPCServicifyCodeGenerator()
+    # gen = BrokRPCServicifyCodeGenerator()
+    gen = AiohttpServicifyCodeGenerator()
     for file in gen.generate(gen_context):
         if dry_run:
             continue
@@ -117,13 +116,14 @@ def show(
 
     for entrypoint in inspect_source_dir(src, ignore_module_on_import_error=ignore_module_on_import_error):
         if entrypoint.methods:
+            type_ = entrypoint.type_
             click.echo(
-                f"* {entrypoint.name} ({entrypoint.type_.module.qualname}:{'.'.join(entrypoint.type_.ns)}) "
+                f"* {entrypoint.name} ({type_.module.qualname}:{'.'.join(type_.ns)}) "
                 f"{' ' if entrypoint.doc else ''}{entrypoint.doc or ''}"
             )
 
             for method in entrypoint.methods:
-                signature = inspect.Signature(parameters=method.params, return_annotation=method.returns.annotation)
+                signature = inspect.Signature(parameters=method.params, return_annotation=method.returns)
                 click.echo(f"   * {method.name}{signature}: {method.doc or ''}")
 
             click.echo("")

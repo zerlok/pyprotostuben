@@ -6,24 +6,14 @@ from dataclasses import dataclass
 
 from pyprotostuben.codegen.servicify.abc import ServicifyCodeGenerator
 from pyprotostuben.codegen.servicify.model import EntrypointInfo, GeneratedFile, GeneratorContext, MethodInfo
-from pyprotostuben.python.ast_builder import ASTBuilder, PackageBuilder
+from pyprotostuben.python.builder import ModuleASTBuilder, PackageASTBuilder
 from pyprotostuben.python.info import ModuleInfo, PackageInfo, TypeInfo
 from pyprotostuben.string_case import camel2snake, snake2camel
 
 
-class EntrypointTrait:
-    def __init__(self, context: GeneratorContext, entrypoint: EntrypointInfo) -> None:
-        self.__context = context
-        self.__entrypoint = entrypoint
-
-    def get_root_pkg(self) -> PackageInfo:
-        return PackageInfo.build(self.__context.package or "api")
-
-    def get_abc_mod(self) -> ModuleInfo:
-        return ModuleInfo(self.get_root_pkg(), "abc")
-
-    def get_interface_type(self) -> TypeInfo:
-        return TypeInfo.build(self.get_abc_mod(), snake2camel(self.__entrypoint.name.title()))
+class GenTrait:
+    def get_interface_type(self, entrypoint: EntrypointInfo) -> TypeInfo:
+        return TypeInfo.build(ModuleInfo(None, "abc"), snake2camel(entrypoint.name.title()))
 
     def get_type(self, package: str, module: str, name: str) -> TypeInfo:
         return TypeInfo.build(
@@ -54,11 +44,13 @@ class EntrypointTrait:
 class _BaseBrokRPCMethodSpec:
     entrypoint: EntrypointInfo
     method: MethodInfo
-    trait: EntrypointTrait
+    # trait: GenTrait
 
     @property
     def parts(self) -> t.Sequence[str]:
-        return *self.entrypoint.type_.module.parts, *self.entrypoint.type_.ns, self.method.name
+        type_ = self.entrypoint.type_
+        module = type_.module
+        return *(module.parts if module is not None else ()), *type_.ns, self.method.name
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -90,26 +82,33 @@ class BrokRPCEntrypointSpec:
 #  (protobuf message types & serializer_module).
 class BrokRPCServicifyCodeGenerator(ServicifyCodeGenerator):
     def generate(self, context: GeneratorContext) -> t.Sequence[GeneratedFile]:
-        builder = PackageBuilder(context.package or "api")
+        builder = PackageASTBuilder(PackageInfo(None, context.package or "api"))
         specs: t.Sequence[BrokRPCEntrypointSpec] = list(self.__build_entrypoint_specs(context))
 
-        print(specs)
+        self.__build_abc_module(GenTrait(), builder, specs)
 
-        # TODO: repeat domain project root_pkg structure
         return [
-            # *(
-            #     self.__gen_package(context, pkg)
-            #     for pkg in (
-            #         # mod_manager.get_root_pkg(),
-            #         # mod_manager.get_server_pkg(),
-            #         # mod_manager.get_client_pkg(),
-            #     )
-            # ),
-            # *self.__build_serializer_modules(context, specs),
-            self.__build_abc_module(context, specs),
-            # *self.__build_server_modules(context, specs),
-            # *self.__build_client_modules(context, specs),
+            GeneratedFile(
+                path=context.output.joinpath(module.file),
+                content=ast.unparse(body),
+            )
+            for module, body in builder.build()
         ]
+
+        # # TODO: repeat domain project root_pkg structure
+        # return [
+        #     *(
+        #         self.__gen_package(context, pkg)
+        #         for pkg in (
+        #             # mod_manager.get_root_pkg(),
+        #             # mod_manager.get_server_pkg(),
+        #             # mod_manager.get_client_pkg(),
+        #         )
+        #     ),
+        #     *self.__build_serializer_modules(context, specs),
+        #     *self.__build_server_modules(context, specs),
+        #     *self.__build_client_modules(context, specs),
+        # ]
 
     def __build_entrypoint_specs(self, context: GeneratorContext) -> t.Iterable[BrokRPCEntrypointSpec]:
         for entrypoint in context.entrypoints:
@@ -127,13 +126,13 @@ class BrokRPCServicifyCodeGenerator(ServicifyCodeGenerator):
         entrypoint: EntrypointInfo,
         method: MethodInfo,
     ) -> BrokRPCMethodSpec:
-        trait = EntrypointTrait(context, entrypoint)
+        # trait = GenTrait(context, entrypoint)
 
         if method.returns is None:
             return BrokRPCConsumerMethodSpec(
                 entrypoint=entrypoint,
                 method=method,
-                trait=trait,
+                # trait=trait,
             )
 
         else:
@@ -142,41 +141,41 @@ class BrokRPCServicifyCodeGenerator(ServicifyCodeGenerator):
                 method=method,
                 # TODO: support all kinds
                 kind=BrokRPCRequestResponseMethodSpec.Kind.UNARY_UNARY,
-                trait=trait,
+                # trait=trait,
             )
 
     def __build_abc_module(
         self,
-        context: GeneratorContext,
+        trait: GenTrait,
+        pkg_builder: PackageASTBuilder,
         specs: t.Sequence[BrokRPCEntrypointSpec],
-    ) -> GeneratedFile:
-        builder = self.__get_builder(info)
+    ) -> None:
+        trait.get_interface_type()
 
-        body = builder.build_module(
+        builder = pkg_builder.module(ModuleInfo(None, "abc"))
+
+        builder.build(
             body=[
-                builder.build_abstract_class_def(
-                    name=spec.name,
+                builder.abstract_class_def(
+                    name=spec.entrypoint.name,
                     body=[
-                        builder.build_abstract_method_def(
-                            name=method.name,
+                        builder.abstract_method_def(
+                            name=method.method.name,
                             args=[
-                                builder.build_pos_arg(
-                                    name="input_",
-                                    annotation=builder.build_int_ref(),
+                                builder.pos_arg(
+                                    name="event" if isinstance(method, BrokRPCConsumerMethodSpec) else "request",
+                                    annotation=builder.int_ref(),
                                 )
                             ],
-                            returns=builder.build_none_ref(),
+                            returns=trait.get_type("wtf", "model", method.method.name),
                             is_async=True,
                         )
-                        for group, methods in spec.groups.items()
-                        for method in methods
+                        for method in spec.methods
                     ],
                 )
                 for spec in specs
             ],
         )
-
-        return self.__gen_module(context, info, body)
 
     # TODO: separate server & client serializer_module
     def __build_serializer_module(
@@ -187,7 +186,7 @@ class BrokRPCServicifyCodeGenerator(ServicifyCodeGenerator):
     ) -> GeneratedFile:
         builder = self.__get_builder(info)
 
-        body = builder.build_module(
+        body = builder.build(
             body=list(itertools.chain.from_iterable(self.__build_method_serializers(spec, builder) for spec in specs))
         )
 
@@ -201,23 +200,23 @@ class BrokRPCServicifyCodeGenerator(ServicifyCodeGenerator):
     ) -> GeneratedFile:
         builder = self.__get_builder(info)
 
-        body = builder.build_module(
+        body = builder.build(
             body=list(
                 itertools.chain.from_iterable(
                     (
-                        builder.build_func_def(
+                        builder.func_def(
                             name=f"register_{camel2snake(spec.name.title())}",
                             args=[
-                                builder.build_pos_arg(
+                                builder.pos_arg(
                                     name="entrypoint",
-                                    annotation=builder.build_attr(spec.name),
+                                    annotation=builder.attr(spec.name),
                                 ),
-                                builder.build_pos_arg(
+                                builder.pos_arg(
                                     name="server",
-                                    annotation=builder.build_ref(TypeInfo.from_str("brokrpc.rpc.server:Server")),
+                                    annotation=builder.ref(TypeInfo.from_str("brokrpc.rpc.server:Server")),
                                 ),
                             ],
-                            returns=builder.build_none_ref(),
+                            returns=builder.none_ref(),
                             body=[
                                 self.__build_server_method_register_stmt(method, builder)
                                 for group, methods in spec.groups.items()
@@ -240,33 +239,33 @@ class BrokRPCServicifyCodeGenerator(ServicifyCodeGenerator):
     ) -> GeneratedFile:
         builder = self.__get_builder(info)
 
-        body = builder.build_module(
+        body = builder.build(
             body=[self.__build_client_class(spec, builder) for spec in specs],
         )
 
         return self.__gen_module(context, info, body)
 
-    def __build_method_serializers(self, spec: BrokRPCMethodSpec, builder: ASTBuilder) -> t.Iterable[ast.stmt]:
+    def __build_method_serializers(self, spec: BrokRPCMethodSpec, builder: ModuleASTBuilder) -> t.Iterable[ast.stmt]:
         return (
-            builder.build_class_def(
+            builder.class_def(
                 name=spec.request_name,
                 bases=[TypeInfo.from_str("brokrpc.rpc.abc:RPCSerializer")],
                 body=[
-                    builder.build_attr_stub(
+                    builder.attr_stub(
                         name=param.name,
                         annotation=TypeInfo.from_type(param.annotation),
                     )
                     for param in spec.request_params
                 ],
             ),
-            builder.build_class_def(
+            builder.class_def(
                 name=spec.response_name,
                 bases=[TypeInfo.from_str("brokrpc.rpc.abc:RPCSerializer")],
-                body=[builder.build_pass_stmt()],
+                body=[builder.pass_stmt()],
             ),
         )
 
-    def __build_server_method_register_stmt(self, spec: BrokRPCMethodSpec, builder: ASTBuilder) -> ast.stmt:
+    def __build_server_method_register_stmt(self, spec: BrokRPCMethodSpec, builder: ModuleASTBuilder) -> ast.stmt:
         registrator: str
 
         if isinstance(spec, BrokRPCConsumerMethodSpec):
@@ -291,34 +290,34 @@ class BrokRPCServicifyCodeGenerator(ServicifyCodeGenerator):
         else:
             t.assert_never(spec.kind)
 
-        return builder.build_call_stmt(
-            func=builder.build_attr("server", registrator),
+        return builder.call_stmt(
+            func=builder.attr("server", registrator),
             kwargs={
-                "func": builder.build_attr("entrypoint", spec.method.name),
-                "routing_key": builder.build_const("/".join(spec.parts)),
-                "serializer": builder.build_ref(spec.server_serializer),
+                "func": builder.attr("entrypoint", spec.method.name),
+                "routing_key": builder.const("/".join(spec.parts)),
+                "serializer": builder.ref(spec.server_serializer),
             },
         )
 
-    def __build_client_class(self, spec: BrokRPCEntrypointSpec, builder: ASTBuilder) -> ast.stmt:
+    def __build_client_class(self, spec: BrokRPCEntrypointSpec, builder: ModuleASTBuilder) -> ast.stmt:
         name = f"{snake2camel(spec.name.title())}Client"
 
-        return builder.build_class_def(
+        return builder.class_def(
             name=name,
             body=[
-                builder.build_class_method_def(
+                builder.class_method_def(
                     name="create",
                     args=[
-                        builder.build_pos_arg(
+                        builder.pos_arg(
                             name="client",
-                            annotation=builder.build_ref(TypeInfo.from_str("brokrpc.rpc.client:Client")),
+                            annotation=builder.ref(TypeInfo.from_str("brokrpc.rpc.client:Client")),
                         ),
                     ],
-                    returns=builder.build_const(name),
+                    returns=builder.const(name),
                     is_async=True,
                     is_context_manager=True,
                     body=[
-                        builder.build_with_stmt(
+                        builder.with_stmt(
                             items=[
                                 (
                                     spec.name,
@@ -328,11 +327,11 @@ class BrokRPCServicifyCodeGenerator(ServicifyCodeGenerator):
                                 for method in methods
                             ],
                             body=[
-                                builder.build_yield_stmt(
-                                    value=builder.build_call(
-                                        func=builder.build_attr("cls"),
+                                builder.yield_stmt(
+                                    value=builder.call(
+                                        func=builder.attr("cls"),
                                         kwargs={
-                                            method.name: builder.build_attr(method.name)
+                                            method.name: builder.attr(method.name)
                                             for group, methods in spec.groups.items()
                                             for method in methods
                                         },
@@ -343,9 +342,9 @@ class BrokRPCServicifyCodeGenerator(ServicifyCodeGenerator):
                         ),
                     ],
                 ),
-                builder.build_init_attrs_def(
+                builder.init_attrs_def(
                     args=[
-                        builder.build_pos_arg(
+                        builder.pos_arg(
                             name=spec.name,
                             annotation=self.__build_client_method_caller_type(method, builder),
                         )
@@ -361,7 +360,9 @@ class BrokRPCServicifyCodeGenerator(ServicifyCodeGenerator):
             ],
         )
 
-    def __build_client_method_caller_register_stmt(self, spec: BrokRPCMethodSpec, builder: ASTBuilder) -> ast.expr:
+    def __build_client_method_caller_register_stmt(
+        self, spec: BrokRPCMethodSpec, builder: ModuleASTBuilder
+    ) -> ast.expr:
         registrator: str
 
         if isinstance(spec, BrokRPCConsumerMethodSpec):
@@ -386,55 +387,55 @@ class BrokRPCServicifyCodeGenerator(ServicifyCodeGenerator):
         else:
             t.assert_never(spec.kind)
 
-        return builder.build_call(
-            func=builder.build_attr("client", registrator),
+        return builder.call(
+            func=builder.attr("client", registrator),
             kwargs={
-                "routing_key": builder.build_const("/".join(spec.parts)),
-                "serializer": builder.build_ref(spec.client_serializer),
+                "routing_key": builder.const("/".join(spec.parts)),
+                "serializer": builder.ref(spec.client_serializer),
             },
         )
 
-    def __build_client_method_caller_type(self, spec: BrokRPCMethodSpec, builder: ASTBuilder) -> ast.expr:
+    def __build_client_method_caller_type(self, spec: BrokRPCMethodSpec, builder: ModuleASTBuilder) -> ast.expr:
         if isinstance(spec, BrokRPCConsumerMethodSpec):
-            return builder.build_generic_ref(
-                TypeInfo.from_str("brokrpc.abc:Publisher"), builder.build_attr(spec.name), builder.build_none_ref()
+            return builder.generic_ref(
+                TypeInfo.from_str("brokrpc.abc:Publisher"), builder.attr(spec.name), builder.none_ref()
             )
 
         elif isinstance(spec, BrokRPCRequestResponseMethodSpec):
-            return builder.build_generic_ref(
+            return builder.generic_ref(
                 TypeInfo.from_str("brokrpc.rpc.abc:Caller"),
-                builder.build_attr(spec.request_name),
-                builder.build_attr(spec.response_name),
+                builder.attr(spec.request_name),
+                builder.attr(spec.response_name),
             )
 
         else:
             t.assert_never(spec.kind)
 
-    def __build_client_method_caller_def(self, spec: BrokRPCMethodSpec, builder: ASTBuilder) -> ast.stmt:
+    def __build_client_method_caller_def(self, spec: BrokRPCMethodSpec, builder: ModuleASTBuilder) -> ast.stmt:
         if isinstance(spec, BrokRPCConsumerMethodSpec):
-            return builder.build_method_def(
+            return builder.method_def(
                 name=spec.name,
-                args=[builder.build_pos_arg(name="event", annotation=spec.input_info)],
+                args=[builder.pos_arg(name="event", annotation=spec.input_info)],
                 body=[
-                    builder.build_call_stmt(
-                        func=builder.build_attr("self", f"__{spec.name}", "publish"),
-                        args=[builder.build_attr("event")],
+                    builder.call_stmt(
+                        func=builder.attr("self", f"__{spec.name}", "publish"),
+                        args=[builder.attr("event")],
                         is_async=True,
                     ),
                 ],
-                returns=builder.build_none_ref(),
+                returns=builder.none_ref(),
                 is_async=True,
             )
 
         elif isinstance(spec, BrokRPCRequestResponseMethodSpec):
-            return builder.build_method_def(
+            return builder.method_def(
                 name=spec.name,
-                args=[builder.build_pos_arg(name="request", annotation=spec.request_info)],
+                args=[builder.pos_arg(name="request", annotation=spec.request_info)],
                 body=[
-                    builder.build_return_stmt(
-                        value=builder.build_call(
-                            func=builder.build_attr("self", f"__{spec.name}", "invoke"),
-                            args=[builder.build_attr("request")],
+                    builder.return_stmt(
+                        value=builder.call(
+                            func=builder.attr("self", f"__{spec.name}", "invoke"),
+                            args=[builder.attr("request")],
                             is_async=True,
                         ),
                     )
@@ -445,6 +446,3 @@ class BrokRPCServicifyCodeGenerator(ServicifyCodeGenerator):
 
         else:
             t.assert_never(spec.kind)
-
-    def __gen_module(self, context: GeneratorContext, info: ModuleInfo, body: ast.Module) -> GeneratedFile:
-        return GeneratedFile(path=context.output.joinpath(info.file), content=ast.unparse(body))

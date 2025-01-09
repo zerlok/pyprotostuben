@@ -14,7 +14,7 @@ from pyprotostuben.protobuf.context import ContextBuilder
 from pyprotostuben.protobuf.file import ProtoFile
 from pyprotostuben.protobuf.parser import CodeGeneratorParameters
 from pyprotostuben.protobuf.registry import TypeRegistry
-from pyprotostuben.python.ast_builder import ASTBuilder, ModuleDependencyResolver
+from pyprotostuben.python.builder import ModuleASTBuilder
 from pyprotostuben.python.info import ModuleInfo
 
 
@@ -73,7 +73,7 @@ class MypyStubFactory(MypyStubTrait):
 
     def create_pb2_builder(self, module: ModuleInfo) -> Pb2AstBuilder:
         return Pb2AstBuilder(
-            inner=ASTBuilder(ModuleDependencyResolver(module)),
+            inner=ModuleASTBuilder(module),
             mutable=self.__params.has_flag("message-mutable"),
             all_init_args_optional=self.__params.has_flag("message-all-init-args-optional"),
             include_descriptors=self.__params.has_flag("include-descriptors"),
@@ -84,7 +84,7 @@ class MypyStubFactory(MypyStubTrait):
 
     def create_pb2_grpc_builder(self, module: ModuleInfo) -> Pb2GrpcAstBuilder:
         return Pb2GrpcAstBuilder(
-            inner=ASTBuilder(ModuleDependencyResolver(module)),
+            inner=ModuleASTBuilder(module),
             is_sync=self.__params.has_flag("grpc-sync"),
             skip_servicer=self.__params.has_flag("grpc-skip-servicer"),
             skip_stub=self.__params.has_flag("grpc-skip-stub"),
