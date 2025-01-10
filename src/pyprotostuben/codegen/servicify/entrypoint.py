@@ -84,6 +84,9 @@ def inspect_source_dir(
 
 def inspect_module(module: ModuleType) -> t.Iterable[EntrypointInfo]:
     for name, obj in inspect.getmembers(module):
+        if not inspect.isclass(obj) or obj.__module__ != module.__name__:
+            continue
+
         opts = get_entrypoint_options(obj)
         if opts is None:
             continue
@@ -111,10 +114,5 @@ def inspect_method(name: str, func: t.Callable[..., object]) -> MethodInfo:
         # skip `self`
         params=list(signature.parameters.values())[1:],
         returns=signature.return_annotation,
-        # returns=inspect.Parameter(
-        #     name="returns",
-        #     kind=inspect.Parameter.POSITIONAL_ONLY,
-        #     annotation=signature.return_annotation,
-        # ),
         doc=inspect.getdoc(func),
     )

@@ -38,10 +38,12 @@ class ModelASTBuilder:
         trait: t.Optional[TypeWalkerTrait] = None,
     ) -> None:
         self.__factory = factory
+        self.__trait = trait or DefaultTypeWalkerTrait()
+
         self.__hierarchy = list[object]()
         self.__registry = dict[object, tuple[t.Sequence[ast.stmt], TypeRef]]()
-        self.__walker = TypeWalker(
-            trait or DefaultTypeWalkerTrait(),
+        self.__analyzer = TypeWalker(
+            self.__trait,
             TypeHierarchyAnalyzer(self.__registry, self.__hierarchy),
             NestedTypesDataclassASTGenerator(factory),
         )
@@ -64,14 +66,25 @@ class ModelASTBuilder:
         todo = set(types) - self.__registry.keys()
 
         for type_ in todo:
-            context = GenContext(deque([TypeContext(None, [], [])]))
-            self.__walker.walk(type_, context)
+            context = GenContext(deque([TypeContext(None, [], [], [])]))
+            self.__analyzer.walk(type_, context)
 
             self.__registry[type_] = (context.last.nested, context.last.types[0])
 
     def resolve(self, type_: type[object]) -> TypeRef:
         _, ref = self.__registry[type_]
         return ref
+
+    def init_model_expr(self, builder: ModuleASTBuilder, type_: type[object], original_var: str) -> ast.expr:
+        context = InitExprContext(attrs=[], exprs=[])
+
+        walker = TypeWalker(self.__trait, NestedTypesInitExprGenerator(builder, original_var, self.__registry))
+        walker.walk(type_, context)
+
+        return context.exprs[0]
+
+    def init_original_expr(self, builder: ModuleASTBuilder, type_: type[object], model_var: str) -> ast.expr:
+        pass
 
     def get_all_defs(self) -> t.Sequence[ast.stmt]:
         return [stmt for type_ in self.__hierarchy for stmt in self.__registry[type_][0]]
@@ -142,6 +155,7 @@ class TypeContext:
     name: t.Optional[str]
     nested: t.MutableSequence[ast.stmt]
     types: t.MutableSequence[TypeRef]
+    attrs: t.MutableSequence[ast.expr]
 
 
 @dataclass()
@@ -157,7 +171,7 @@ class GenContext:
         return self.stack[-1]
 
     def enter(self, name: t.Optional[str] = None) -> TypeContext:
-        context = TypeContext(name=name, nested=list(), types=list())
+        context = TypeContext(name=name, nested=list(), types=list(), attrs=list())
         self.stack.append(context)
 
         return context
@@ -191,7 +205,7 @@ class TypeHierarchyAnalyzer(TypeVisitorDecorator[GenContext]):
         pass
 
     def leave_container(self, context: ContainerContext, meta: GenContext) -> None:
-        self.__add_type(context.type_)
+        self.__add_type(context.origin)
 
     def enter_structure(self, context: StructureContext, meta: GenContext) -> None:
         pass
@@ -226,13 +240,61 @@ class NestedTypesDataclassASTGenerator(TypeVisitorDecorator[GenContext]):
         meta.enter()
 
     def leave_container(self, context: ContainerContext, meta: GenContext) -> None:
-        inner_types = meta.leave()
-        meta.last.types.append(self.__factory.create_container_ref(context.origin, inner_types.types))
+        inner = meta.leave()
+        meta.last.nested.extend(inner.nested)
+        meta.last.types.append(self.__factory.create_container_ref(context.origin, inner.types))
 
     def enter_structure(self, context: StructureContext, meta: GenContext) -> None:
         meta.enter(context.name)
 
     def leave_structure(self, context: StructureContext, meta: GenContext) -> None:
+        inner = meta.leave()
+        meta.last.nested.append(
+            self.__factory.create_model_def(
+                name=context.name,
+                fields={field.name: type_ref for field, type_ref in zip(context.fields, inner.types)},
+                defaults={},
+                nested=inner.nested,
+            )
+        )
+        meta.last.types.append(TypeInfo.build(None, context.name))
+
+
+@dataclass(frozen=True, kw_only=True)
+class InitExprContext:
+    attrs: t.MutableSequence[str]
+    exprs: t.MutableSequence[ast.expr]
+
+
+class NestedTypesInitExprGenerator(TypeVisitorDecorator[InitExprContext]):
+    def __init__(self, builder: ModuleASTBuilder, source_var: str, registry: t.Mapping[type[object], ...]) -> None:
+        self.__builder = builder
+        self.__source_var = source_var
+        self.__registry = registry
+
+    def enter_scalar(self, context: ScalarContext, meta: InitExprContext) -> None:
+        pass
+
+    def leave_scalar(self, context: ScalarContext, meta: InitExprContext) -> None:
+        meta.exprs.append(self.__builder.attr(*meta.attrs))
+
+    def enter_enum(self, context: EnumContext, meta: InitExprContext) -> None:
+        pass
+
+    def leave_enum(self, context: EnumContext, meta: InitExprContext) -> None:
+        meta.exprs.append(self.__builder.attr(*meta.attrs))
+
+    def enter_container(self, context: ContainerContext, meta: InitExprContext) -> None:
+        pass
+
+    def leave_container(self, context: ContainerContext, meta: InitExprContext) -> None:
+        # TODO: set / list / dict compr
+        pass
+
+    def enter_structure(self, context: StructureContext, meta: InitExprContext) -> None:
+        pass
+
+    def leave_structure(self, context: StructureContext, meta: InitExprContext) -> None:
         inner = meta.leave()
         meta.last.nested.append(
             self.__factory.create_model_def(

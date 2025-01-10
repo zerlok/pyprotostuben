@@ -111,146 +111,101 @@ class FastAPIServicifyCodeGenerator(ServicifyCodeGenerator):
     def __build_server_module(self, context: GeneratorContext, pkg: PackageASTBuilder) -> None:
         mod = pkg.module(ModuleInfo(None, "server"))
 
-        raw_request_ref = TypeInfo.build(ModuleInfo(PackageInfo(None, "starlette"), "requests"), "Request")
+        abc_ref = ModuleInfo(pkg.info, "abc")
         model_ref = ModuleInfo(pkg.info, "model")
 
-        mod.append(
-            mod.func_def(
-                name="create_app",
-                args=[
-                    mod.pos_arg(
-                        name=camel2snake(entrypoint.name),
-                        annotation=TypeInfo.build(ModuleInfo(pkg.info, "abc"), snake2camel(entrypoint.name)),
-                    )
-                    for entrypoint in context.entrypoints
-                ],
-                returns=TypeInfo.build(ModuleInfo(None, "fastapi"), "FastAPI"),
-                body=[
-                    mod.func_def(
-                        name="init_lifespan",
-                        args=[
-                            mod.pos_arg(name="_", annotation=TypeInfo.build(ModuleInfo(None, "fastapi"), "FastAPI")),
-                        ],
-                        body=[
-                            mod.yield_stmt(
-                                mod.dict_expr(
-                                    {
-                                        mod.const(camel2snake(entrypoint.name)): mod.attr(camel2snake(entrypoint.name))
-                                        for entrypoint in context.entrypoints
-                                    }
-                                )
-                            )
-                        ],
-                        returns=mod.mapping_ref(mod.str_ref(), TypeInfo.from_type(object)),
-                        is_async=True,
-                        is_context_manager=True,
-                    ),
-                    mod.assign(
-                        "app",
-                        value=mod.call(
-                            func=TypeInfo.build(ModuleInfo(None, "fastapi"), "FastAPI"),
-                            kwargs={
-                                "lifespan": mod.attr("init_lifespan"),
-                            },
-                        ),
-                    ),
-                    *(
-                        mod.call_stmt(
-                            func=mod.attr("app", "include_router"),
-                            args=[mod.attr(f"{camel2snake(entrypoint.name)}_router")],
-                        )
-                        for entrypoint in context.entrypoints
-                    ),
-                    mod.return_stmt(mod.attr("app")),
-                ],
-            )
-        )
-
         for entrypoint in context.entrypoints:
-            dependency_name = f"get_{camel2snake(entrypoint.name)}_dependency"
-            router_name = f"{camel2snake(entrypoint.name)}_router"
-            entrypoint_abc_ref = TypeInfo.build(ModuleInfo(pkg.info, "abc"), snake2camel(entrypoint.name))
-
-            mod.extend(
-                mod.assign(
-                    router_name,
-                    value=mod.call(
-                        func=TypeInfo.build(ModuleInfo(None, "fastapi"), "APIRouter"),
-                        kwargs={
-                            "prefix": mod.const(f"/{camel2snake(entrypoint.name)}"),
-                        },
-                    ),
-                ),
-            )
+            handler_name = f"{snake2camel(entrypoint.name)}Handler"
 
             mod.append(
                 mod.func_def(
-                    name=dependency_name,
+                    name=f"create_{camel2snake(entrypoint.name)}_router",
                     args=[
                         mod.pos_arg(
-                            name="raw_request",
-                            annotation=mod.ref(raw_request_ref),
+                            name="entrypoint",
+                            annotation=TypeInfo.build(ModuleInfo(pkg.info, "abc"), snake2camel(entrypoint.name)),
                         ),
                     ],
-                    returns=entrypoint_abc_ref,
-                    body=[mod.return_stmt(mod.attr("raw_request", "state", camel2snake(entrypoint.name)))],
+                    returns=TypeInfo.build(ModuleInfo(None, "fastapi"), "APIRouter"),
+                    body=[
+                        mod.assign(
+                            "router",
+                            value=mod.call(
+                                func=TypeInfo.build(ModuleInfo(None, "fastapi"), "APIRouter"),
+                                kwargs={
+                                    "prefix": mod.const(f"/{camel2snake(entrypoint.name)}"),
+                                    "tags": mod.const([entrypoint.name]),
+                                },
+                            ),
+                        ),
+                        *(
+                            mod.call_stmt(
+                                func=mod.call(
+                                    func=mod.attr("router", "post"),
+                                    kwargs={
+                                        "path": mod.const(f"/{method.name}"),
+                                        "description": mod.const(method.doc)
+                                        if method.doc is not None
+                                        else mod.none_ref(),
+                                    },
+                                ),
+                                args=[mod.attr("entrypoint", method.name)],
+                            )
+                            for method in entrypoint.methods
+                        ),
+                        mod.return_stmt(mod.attr("router")),
+                    ],
                 )
             )
 
-            for method in entrypoint.methods:
-                mod.append(
-                    mod.func_def(
-                        name=f"handle_{camel2snake(entrypoint.name)}_{method.name}",
-                        decorators=[
-                            mod.call(
-                                func=mod.attr(router_name, "post"),
-                                kwargs={
-                                    "path": mod.const(f"/{method.name}"),
-                                    "description": mod.const(method.doc) if method.doc is not None else mod.none_ref(),
-                                },
-                            )
-                        ],
-                        args=[
-                            mod.pos_arg(
-                                name="request",
-                                annotation=TypeInfo.build(
-                                    model_ref, self.__build_model_name(entrypoint, method, "Request")
+            mod.append(
+                mod.class_def(
+                    name=handler_name,
+                    bases=[mod.ref(TypeInfo.build(abc_ref, snake2camel(entrypoint.name)))],
+                    body=[
+                        mod.init_attrs_def(
+                            args=[
+                                mod.pos_arg(
+                                    name="impl",
+                                    annotation=entrypoint.type_,
                                 ),
-                            ),
-                            mod.pos_arg(
-                                name="entrypoint",
-                                annotation=entrypoint_abc_ref,
-                                default=mod.call(
-                                    func=TypeInfo.build(ModuleInfo(None, "fastapi"), "Depends"),
-                                    args=[mod.attr(dependency_name)],
-                                ),
-                            ),
-                        ],
-                        returns=TypeInfo.build(model_ref, self.__build_model_name(entrypoint, method, "Response"))
-                        if method.returns is not None
-                        else None,
-                        body=[
-                            mod.assign(
-                                "response",
-                                value=mod.call(
-                                    func=mod.attr("entrypoint", method.name),
-                                    args=[mod.attr("request")],
-                                    is_async=True,
-                                ),
-                            ),
-                            mod.return_stmt(mod.attr("response")),
-                        ]
-                        if method.returns is not None
-                        else [
-                            mod.call_stmt(
-                                func=mod.attr("entrypoint", method.name),
-                                args=[mod.attr("request")],
+                            ],
+                        ),
+                        *(
+                            mod.method_def(
+                                name=method.name,
+                                args=[
+                                    mod.pos_arg(
+                                        name="request",
+                                        annotation=TypeInfo.build(
+                                            model_ref, self.__build_model_name(entrypoint, method, "Request")
+                                        ),
+                                    )
+                                ],
+                                returns=TypeInfo.build(
+                                    model_ref, self.__build_model_name(entrypoint, method, "Response")
+                                )
+                                if method.returns is not None
+                                else mod.none_ref(),
+                                body=[
+                                    *(mod.assign(param.name, value=mod.none_ref()) for param in method.params),
+                                    mod.assign(
+                                        "output",
+                                        value=mod.call(
+                                            func=mod.attr("self", "__impl", method.name),
+                                            kwargs={param.name: mod.attr(param.name) for param in method.params},
+                                        ),
+                                    ),
+                                    mod.assign("response", value=mod.attr("output")),
+                                    mod.return_stmt(mod.attr("response")),
+                                ],
                                 is_async=True,
                             )
-                        ],
-                        is_async=True,
-                    )
+                            for method in entrypoint.methods
+                        ),
+                    ],
                 )
+            )
 
         mod.build()
 

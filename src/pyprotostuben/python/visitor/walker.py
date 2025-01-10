@@ -2,6 +2,7 @@ import abc
 import enum
 import inspect
 import typing as t
+import uuid
 from dataclasses import MISSING, is_dataclass
 from dataclasses import fields as get_dataclass_fields
 from datetime import date, datetime, time, timedelta
@@ -49,12 +50,15 @@ class DefaultTypeWalkerTrait(TypeWalkerTrait):
 
         if obj is t.Any or (
             isinstance(obj, type)
-            and issubclass(obj, (bytes, bytearray, bool, int, float, complex, str, time, date, datetime, timedelta))
+            and issubclass(
+                obj, (bytes, bytearray, bool, int, float, complex, str, time, date, datetime, timedelta, uuid.UUID)
+            )
         ):
             return ScalarContext(type_=obj)
 
         return None
 
+    @lru_cache
     def extract_enum(self, obj: object) -> t.Optional[EnumContext]:
         if t.get_origin(obj) is t.Literal:
             return EnumContext(
@@ -72,7 +76,15 @@ class DefaultTypeWalkerTrait(TypeWalkerTrait):
 
         return None
 
+    @lru_cache
     def extract_container(self, obj: object) -> t.Optional[ContainerContext]:
+        if isinstance(obj, t.NewType):
+            return ContainerContext(
+                type_=obj,
+                origin=obj.__supertype__,
+                inners=(),
+            )
+
         if (origin := t.get_origin(obj)) is not None and origin not in {t.Literal, t.Generic}:
             return ContainerContext(
                 type_=obj,
@@ -82,6 +94,7 @@ class DefaultTypeWalkerTrait(TypeWalkerTrait):
 
         return None
 
+    @lru_cache
     def extract_structure(self, obj: object) -> t.Optional[StructureContext]:
         if not isinstance(obj, type):
             return None

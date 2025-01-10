@@ -52,7 +52,7 @@ OPT_IGNORE_MODULE_ON_IMPORT_ERROR = click.option(
 )
 
 
-GenKind = t.Literal["brokrpc"]
+GenKind = t.Literal["fastapi"]
 
 
 @cli.command()
