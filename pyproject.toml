@@ -52,6 +52,9 @@ pydantic = "^2.10.4"
 
 [tool.poetry.group.examples.dependencies]
 BrokRPC = { version = "^0.2.0", extras = ["aiormq"], python = ">=3.12,<4.0" }
+fastapi = "^0.115.6"
+httpx = "^0.28.1"
+uvicorn = "^0.34.0"
 
 
 [build-system]

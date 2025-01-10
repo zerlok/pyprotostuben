@@ -6,7 +6,7 @@ from pathlib import Path
 import click
 
 from pyprotostuben.codegen.servicify.entrypoint import inspect_source_dir
-from pyprotostuben.codegen.servicify.generator.aiohttp import AiohttpServicifyCodeGenerator
+from pyprotostuben.codegen.servicify.generator.fastapi import FastAPIServicifyCodeGenerator
 from pyprotostuben.codegen.servicify.model import GeneratorContext
 
 
@@ -95,7 +95,7 @@ def gen(
     )
 
     # gen = BrokRPCServicifyCodeGenerator()
-    gen = AiohttpServicifyCodeGenerator()
+    gen = FastAPIServicifyCodeGenerator()
     for file in gen.generate(gen_context):
         if dry_run:
             continue

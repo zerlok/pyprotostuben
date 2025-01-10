@@ -5,6 +5,7 @@ import abc
 import ast
 import enum
 import typing as t
+from collections import deque
 from dataclasses import dataclass
 from functools import cache, cached_property
 
@@ -258,6 +259,7 @@ class ModuleASTBuilder:
         self.__info = info
         self.__subscribers = list(subscribers or ())
 
+        self.__body = list[ast.stmt]()
         self.__resolver = ModuleDependencyResolver(info)
         self.__predef = get_predef_trait()
 
@@ -745,6 +747,22 @@ class ModuleASTBuilder:
     ) -> ast.stmt:
         return ast.Expr(value=self.call(func=func, args=args, kwargs=kwargs, is_async=is_async))
 
+    def method_call(
+        self,
+        *,
+        obj: TypeRef,
+        name: str,
+        args: t.Optional[t.Sequence[TypeRef]] = None,
+        kwargs: t.Optional[t.Mapping[str, TypeRef]] = None,
+        is_async: bool = False,
+    ) -> ast.expr:
+        return self.call(
+            func=ast.Attribute(value=self.ref(obj), attr=name),
+            args=args,
+            kwargs=kwargs,
+            is_async=is_async,
+        )
+
     def with_stmt(
         self,
         *,
@@ -784,6 +802,13 @@ class ModuleASTBuilder:
 
     def pass_stmt(self) -> ast.Pass:
         return ast.Pass()
+
+    def dict_expr(self, items: t.Mapping[ast.expr, TypeRef]) -> ast.expr:
+        return ast.Dict(
+            keys=[key for key in items.keys()],
+            values=[value for value in items.values()],
+            lineno=None,
+        )
 
     def context_manager_decorator_ref(self, *, is_async: bool = False) -> ast.expr:
         return self.ref(
@@ -871,17 +896,55 @@ class ModuleASTBuilder:
     def import_stmt(self, module: ModuleInfo) -> ast.Import:
         return ast.Import(names=[ast.alias(name=module.qualname)])
 
+    def append(self, stmt: t.Optional[ast.stmt]) -> None:
+        if stmt is not None:
+            self.__body.append(stmt)
+
+    @t.overload
+    def extend(self, *parts: t.Optional[ast.stmt]) -> None: ...
+
+    @t.overload
+    def extend(self, *parts: t.Optional[t.Iterable[t.Optional[ast.stmt]]]) -> None: ...
+
+    @t.overload
+    def extend(self, *parts: t.Optional[t.Iterable[t.Optional[t.Iterable[t.Optional[ast.stmt]]]]]) -> None: ...
+
+    def extend(
+        self,
+        *parts: t.Union[
+            t.Optional[ast.stmt],
+            t.Optional[t.Iterable[t.Optional[ast.stmt]]],
+            t.Optional[t.Iterable[t.Optional[t.Iterable[t.Optional[ast.stmt]]]]],
+        ],
+    ) -> None:
+        inlined = list[ast.stmt]()
+
+        for part in parts:
+            queue = deque([part])
+
+            while queue:
+                item = queue.pop()
+
+                if isinstance(item, t.Iterable):
+                    queue.extend(item)
+                elif item is not None:
+                    inlined.append(item)
+
+        self.__body.extend(inlined)
+
     def build(
         self,
         doc: t.Optional[str] = None,
-        body: t.Optional[t.Sequence[t.Optional[ast.stmt]]] = None,
+        body: t.Optional[t.Iterable[t.Optional[ast.stmt]]] = None,
     ) -> ast.Module:
+        self.extend(body)
+
         module = ast.Module(
             body=self._build_body(
                 doc,
                 [
                     *(self.import_stmt(dep) for dep in self.__resolver.get_dependencies()),
-                    *(stmt for stmt in (body or ()) if stmt is not None),
+                    *self.__body,
                 ],
             ),
             type_ignores=[],
@@ -910,9 +973,8 @@ class ModuleASTBuilder:
                 if arg.kind is FuncArgInfo.Kind.POS
             ],
             defaults=[
-                self.ref(arg.default)
+                self.ref(arg.default) if arg.kind is FuncArgInfo.Kind.POS and arg.default is not None else None
                 for arg in (args or [])
-                if arg.kind is FuncArgInfo.Kind.POS and arg.default is not None
             ],
             kwonlyargs=[
                 ast.arg(
