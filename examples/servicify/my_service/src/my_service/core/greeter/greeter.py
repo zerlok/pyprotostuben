@@ -13,7 +13,7 @@ class Greeter:
 
     def greet(self, user: UserInfo) -> str:
         """Make a greeting message for a user."""
-        return self.__greeting.gen_message({"username": user.name, "previous_greetings": self.__previous})
+        return self.__greeting.gen_message({"user": user, "previous_greetings": self.__previous})
 
     def notify_greeted(self, user: UserInfo, message: str) -> None:
         self.__previous.append(message)

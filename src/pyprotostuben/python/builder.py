@@ -184,8 +184,12 @@ class PredefTrait:
         return TypeInfo.build(self.typing_module, "NoReturn")
 
     @cached_property
-    def overload_ref(self) -> TypeInfo:
+    def overload_decorator_ref(self) -> TypeInfo:
         return TypeInfo.build(self.typing_module, "overload")
+
+    @cached_property
+    def override_decorator_ref(self) -> TypeInfo:
+        return TypeInfo.build(self.typing_module, "override")
 
 
 @cache
@@ -278,8 +282,8 @@ class ModuleASTBuilder:
 
         return self.attr(*(resolved.module.parts if resolved.module is not None else ()), *resolved.ns)
 
-    def attr(self, head: str, *tail: str) -> ast.expr:
-        expr: ast.expr = ast.Name(id=head)
+    def attr(self, head: t.Union[str, ast.expr], *tail: str) -> ast.expr:
+        expr: ast.expr = ast.Name(id=head) if isinstance(head, str) else head
         for attr in tail:
             expr = ast.Attribute(attr=attr, value=expr)
 
@@ -332,10 +336,14 @@ class ModuleASTBuilder:
         is_final: bool = False,
         is_async: bool = False,
         is_context_manager: bool = False,
+        is_overload: bool = False,
+        is_override: bool = False,
     ) -> ast.stmt:
         decorator_list = self._build_decorators(
             [
+                self.__predef.overload_decorator_ref if is_overload else None,
                 self.__predef.final_decorator_ref if is_final else None,
+                self.__predef.override_decorator_ref if is_override else None,
             ],
             decorators,
             [
@@ -381,6 +389,8 @@ class ModuleASTBuilder:
         is_final: bool = False,
         is_async: bool = False,
         is_context_manager: bool = False,
+        is_overload: bool = False,
+        is_override: bool = False,
     ) -> ast.stmt:
         return self.func_def(
             name=name,
@@ -392,6 +402,8 @@ class ModuleASTBuilder:
             is_final=is_final,
             is_async=is_async,
             is_context_manager=is_context_manager,
+            is_overload=is_overload,
+            is_override=is_override,
         )
 
     def class_def(
@@ -509,6 +521,8 @@ class ModuleASTBuilder:
         is_final: bool = False,
         is_async: bool = False,
         is_context_manager: bool = False,
+        is_overload: bool = False,
+        is_override: bool = False,
     ) -> ast.stmt:
         return self.func_def(
             name=name,
@@ -520,6 +534,8 @@ class ModuleASTBuilder:
             is_final=is_final,
             is_async=is_async,
             is_context_manager=is_context_manager,
+            is_overload=is_overload,
+            is_override=is_override,
         )
 
     def method_stub(
@@ -533,6 +549,8 @@ class ModuleASTBuilder:
         is_final: bool = False,
         is_async: bool = False,
         is_context_manager: bool = False,
+        is_overload: bool = False,
+        is_override: bool = False,
     ) -> ast.stmt:
         return self.method_def(
             name=name,
@@ -544,6 +562,8 @@ class ModuleASTBuilder:
             is_final=is_final,
             is_async=is_async,
             is_context_manager=is_context_manager,
+            is_overload=is_overload,
+            is_override=is_override,
         )
 
     def abstract_method_def(
@@ -555,6 +575,7 @@ class ModuleASTBuilder:
         doc: t.Optional[str] = None,
         is_async: bool = False,
         is_context_manager: bool = False,
+        is_overload: bool = False,
     ) -> ast.stmt:
         return self.method_def(
             name=name,
@@ -564,6 +585,7 @@ class ModuleASTBuilder:
             doc=doc,
             body=[self.raise_not_implemented_error()],
             is_async=is_async,
+            is_overload=is_overload,
         )
 
     def abstract_method_stub(
@@ -575,6 +597,7 @@ class ModuleASTBuilder:
         doc: t.Optional[str] = None,
         is_async: bool = False,
         is_context_manager: bool = False,
+        is_overload: bool = False,
     ) -> ast.stmt:
         return self.method_stub(
             name=name,
@@ -583,6 +606,7 @@ class ModuleASTBuilder:
             returns=self.context_manager_ref(returns, is_async=is_async) if is_context_manager else returns,
             doc=doc,
             is_async=is_async,
+            is_overload=is_overload,
         )
 
     def class_method_def(
@@ -597,6 +621,8 @@ class ModuleASTBuilder:
         is_final: bool = False,
         is_async: bool = False,
         is_context_manager: bool = False,
+        is_overload: bool = False,
+        is_override: bool = False,
     ) -> ast.stmt:
         return self.func_def(
             name=name,
@@ -608,6 +634,8 @@ class ModuleASTBuilder:
             is_final=is_final,
             is_async=is_async,
             is_context_manager=is_context_manager,
+            is_overload=is_overload,
+            is_override=is_override,
         )
 
     def class_method_stub(
@@ -621,6 +649,8 @@ class ModuleASTBuilder:
         is_final: bool = False,
         is_async: bool = False,
         is_context_manager: bool = False,
+        is_overload: bool = False,
+        is_override: bool = False,
     ) -> ast.stmt:
         return self.class_method_def(
             name=name,
@@ -632,6 +662,8 @@ class ModuleASTBuilder:
             is_final=is_final,
             is_async=is_async,
             is_context_manager=is_context_manager,
+            is_overload=is_overload,
+            is_override=is_override,
         )
 
     def property_getter_stub(
@@ -804,7 +836,7 @@ class ModuleASTBuilder:
         return ast.Pass()
 
     @t.overload
-    def set_expr(self, items: ast.expr, target: str, item: ast.expr) -> ast.expr: ...
+    def set_expr(self, items: ast.expr, target: ast.expr, item: ast.expr) -> ast.expr: ...
 
     @t.overload
     def set_expr(self, items: t.Collection[ast.expr]) -> ast.expr: ...
@@ -812,7 +844,7 @@ class ModuleASTBuilder:
     def set_expr(
         self,
         items: t.Union[ast.expr, t.Collection[ast.expr]],
-        target: t.Optional[str] = None,
+        target: t.Optional[ast.expr] = None,
         item: t.Optional[ast.expr] = None,
     ) -> ast.expr:
         if isinstance(items, ast.expr):
@@ -821,9 +853,7 @@ class ModuleASTBuilder:
 
             return ast.SetComp(
                 elt=item,
-                generators=[
-                    ast.comprehension(target=ast.Name(id=target, lineno=None), iter=items, ifs=[], is_async=False)
-                ],
+                generators=[ast.comprehension(target=target, iter=items, ifs=[], is_async=False)],
                 lineno=None,
             )
 
@@ -833,7 +863,7 @@ class ModuleASTBuilder:
         )
 
     @t.overload
-    def list_expr(self, items: ast.expr, target: str, item: ast.expr) -> ast.expr: ...
+    def list_expr(self, items: ast.expr, target: ast.expr, item: ast.expr) -> ast.expr: ...
 
     @t.overload
     def list_expr(self, items: t.Sequence[ast.expr]) -> ast.expr: ...
@@ -841,7 +871,7 @@ class ModuleASTBuilder:
     def list_expr(
         self,
         items: t.Union[ast.expr, t.Sequence[ast.expr]],
-        target: t.Optional[str] = None,
+        target: t.Optional[ast.expr] = None,
         item: t.Optional[ast.expr] = None,
     ) -> ast.expr:
         if isinstance(items, ast.expr):
@@ -850,9 +880,7 @@ class ModuleASTBuilder:
 
             return ast.ListComp(
                 elt=item,
-                generators=[
-                    ast.comprehension(target=ast.Name(id=target, lineno=None), iter=items, ifs=[], is_async=False),
-                ],
+                generators=[ast.comprehension(target=target, iter=items, ifs=[], is_async=False)],
                 lineno=None,
             )
 
@@ -862,7 +890,7 @@ class ModuleASTBuilder:
         )
 
     @t.overload
-    def dict_expr(self, items: ast.expr, target: str, key: ast.expr, value: ast.expr) -> ast.expr: ...
+    def dict_expr(self, items: ast.expr, target: ast.expr, key: ast.expr, value: ast.expr) -> ast.expr: ...
 
     @t.overload
     def dict_expr(self, items: t.Mapping[ast.expr, ast.expr]) -> ast.expr: ...
@@ -870,7 +898,7 @@ class ModuleASTBuilder:
     def dict_expr(
         self,
         items: t.Union[ast.expr, t.Mapping[ast.expr, ast.expr]],
-        target: t.Optional[str] = None,
+        target: t.Optional[ast.expr] = None,
         key: t.Optional[ast.expr] = None,
         value: t.Optional[ast.expr] = None,
     ) -> ast.expr:
@@ -882,9 +910,7 @@ class ModuleASTBuilder:
             return ast.DictComp(
                 key=key,
                 value=value,
-                generators=[
-                    ast.comprehension(target=ast.Name(id=target, lineno=None), iter=items, ifs=[], is_async=False),
-                ],
+                generators=[ast.comprehension(target=target, iter=items, ifs=[], is_async=False)],
                 lineno=None,
             )
 
@@ -957,7 +983,7 @@ class ModuleASTBuilder:
         return self.ref(self.__predef.no_return_ref)
 
     def overload_ref(self) -> ast.expr:
-        return self.ref(self.__predef.overload_ref)
+        return self.ref(self.__predef.overload_decorator_ref)
 
     def none_ref(self) -> ast.expr:
         return ast.Constant(value=None)

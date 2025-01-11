@@ -85,22 +85,21 @@ class ModelDefBuilder:
         _, ref = self.__registry[type_]
         return ref
 
-    def assign_stmt(
+    def assign_expr(
         self,
-        target_var: str,
-        source_var: str,
+        source: ast.expr,
         type_: type[object],
         mode: t.Literal["original", "model"],
         builder: ModuleASTBuilder,
-    ) -> ast.stmt:
-        context = InitExprContext(deque([InitExprContext.Item([source_var], [])]))
+    ) -> ast.expr:
+        context = InitExprContext(deque([InitExprContext.Item(source, [])]))
 
         resolve = TypeInfo.from_type if mode == "original" else self.resolve
 
         walker = TypeWalker(self.__trait, AssignExprGenerator(builder, resolve))
         walker.walk(type_, context)
 
-        return builder.assign(target_var, value=context.last.exprs[0])
+        return context.last.exprs[0]
 
     def get_all_defs(self) -> t.Sequence[ast.stmt]:
         return [stmt for type_ in self.__hierarchy for stmt in self.__registry[type_][0]]
@@ -276,7 +275,7 @@ class ModelASTGenerator(TypeVisitorDecorator[GenContext]):
 class InitExprContext:
     @dataclass()
     class Item:
-        attrs: t.Sequence[str]
+        source: ast.expr
         exprs: t.MutableSequence[ast.expr]
 
     stack: t.MutableSequence[Item]
@@ -285,8 +284,8 @@ class InitExprContext:
     def last(self) -> Item:
         return self.stack[-1]
 
-    def enter(self, *attrs: str) -> Item:
-        context = self.Item(attrs=attrs, exprs=[])
+    def enter(self, source: ast.expr) -> Item:
+        context = self.Item(source=source, exprs=[])
         self.stack.append(context)
 
         return context
@@ -304,16 +303,15 @@ class AssignExprGenerator(TypeVisitorDecorator[InitExprContext]):
         pass
 
     def leave_scalar(self, context: ScalarContext, meta: InitExprContext) -> None:
-        scope = meta.last
-        scope.exprs.append(self.__builder.attr(*scope.attrs))
+        meta.last.exprs.append(meta.last.source)
 
     def enter_enum(self, context: EnumContext, meta: InitExprContext) -> None:
-        meta.enter(*meta.last.attrs)
+        meta.enter(meta.last.source)
 
     def leave_enum(self, context: EnumContext, meta: InitExprContext) -> None:
         scope = meta.leave()
         # TODO: support t.Literal
-        meta.last.exprs.append(self.__builder.attr(*scope.attrs, "name"))
+        meta.last.exprs.append(self.__builder.attr(scope.source, "name"))
 
     def enter_enum_value(self, context: EnumValueContext, meta: InitExprContext) -> None:
         pass
@@ -322,21 +320,34 @@ class AssignExprGenerator(TypeVisitorDecorator[InitExprContext]):
         pass
 
     def enter_container(self, context: ContainerContext, meta: InitExprContext) -> None:
-        meta.enter("_".join((*meta.last.attrs, "item")))
+        queue = deque([meta.last.source])
+        parts = ["item"]
+
+        while queue:
+            item = queue.pop()
+
+            if isinstance(item, ast.Attribute):
+                queue.append(item.value)
+                parts.append(item.attr)
+
+            elif isinstance(item, ast.Name):
+                parts.append(item.id)
+
+        meta.enter(self.__builder.attr("_".join(reversed(parts))))
 
     def leave_container(self, context: ContainerContext, meta: InitExprContext) -> None:
         # TODO: set / list / dict compr
         inner = meta.leave()
         meta.last.exprs.append(
             self.__builder.list_expr(
-                items=self.__builder.attr(*meta.last.attrs),
-                target=inner.attrs[0],
+                items=meta.last.source,
+                target=inner.source,
                 item=inner.exprs[0],
             )
         )
 
     def enter_structure(self, context: StructureContext, meta: InitExprContext) -> None:
-        meta.enter(*meta.last.attrs)
+        meta.enter(meta.last.source)
 
     def leave_structure(self, context: StructureContext, meta: InitExprContext) -> None:
         nested = meta.leave()
@@ -348,7 +359,7 @@ class AssignExprGenerator(TypeVisitorDecorator[InitExprContext]):
         )
 
     def enter_structure_field(self, context: StructureFieldContext, meta: InitExprContext) -> None:
-        meta.enter(*meta.last.attrs, context.name)
+        meta.enter(self.__builder.attr(meta.last.source, context.name))
 
     def leave_structure_field(self, context: StructureFieldContext, meta: InitExprContext) -> None:
         nested = meta.leave()

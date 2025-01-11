@@ -18,9 +18,9 @@ class FastAPIServicifyCodeGenerator(ServicifyCodeGenerator):
 
         builder.package(None).build()
         self.__build_abc_module(context, builder)
-        self.__build_model_module(context, builder)
-        self.__build_server_module(context, builder)
-        self.__build_client_module(context, builder)
+        model_builder = self.__build_model_module(context, builder)
+        self.__build_server_module(context, builder, model_builder)
+        self.__build_client_module(context, builder, model_builder)
 
         return [
             GeneratedFile(
@@ -73,7 +73,7 @@ class FastAPIServicifyCodeGenerator(ServicifyCodeGenerator):
         self,
         context: GeneratorContext,
         pkg: PackageASTBuilder,
-    ) -> None:
+    ) -> ModelDefBuilder:
         mod = pkg.module(ModuleInfo(None, "model"))
 
         models = ModelDefBuilder(PydanticModelFactory(mod))
@@ -112,7 +112,9 @@ class FastAPIServicifyCodeGenerator(ServicifyCodeGenerator):
 
         mod.build()
 
-    def __build_server_module(self, context: GeneratorContext, pkg: PackageASTBuilder) -> None:
+        return models
+
+    def __build_server_module(self, context: GeneratorContext, pkg: PackageASTBuilder, models: ModelDefBuilder) -> None:
         mod = pkg.module(ModuleInfo(None, "server"))
 
         abc_ref = ModuleInfo(pkg.info, "abc")
@@ -192,18 +194,52 @@ class FastAPIServicifyCodeGenerator(ServicifyCodeGenerator):
                                 if method.returns is not None
                                 else mod.none_ref(),
                                 body=[
-                                    *(mod.assign(param.name, value=mod.none_ref()) for param in method.params),
+                                    *(
+                                        models.assign_stmt(
+                                            target=f"input_{param.name}",
+                                            source=mod.attr("request", param.name),
+                                            type_=param.annotation,
+                                            mode="original",
+                                            builder=mod,
+                                        )
+                                        for param in method.params
+                                    ),
                                     mod.assign(
                                         "output",
                                         value=mod.call(
                                             func=mod.attr("self", "__impl", method.name),
-                                            kwargs={param.name: mod.attr(param.name) for param in method.params},
+                                            kwargs={
+                                                param.name: mod.attr(f"input_{param.name}") for param in method.params
+                                            },
                                         ),
                                     ),
-                                    mod.assign("response", value=mod.attr("output")),
-                                    mod.return_stmt(mod.attr("response")),
+                                    *(
+                                        (
+                                            mod.assign(
+                                                "response",
+                                                value=mod.call(
+                                                    func=TypeInfo.build(
+                                                        model_ref,
+                                                        self.__build_model_name(entrypoint, method, "Response"),
+                                                    ),
+                                                    kwargs={
+                                                        "payload": models.assign_expr(
+                                                            source=mod.attr("output"),
+                                                            type_=method.returns,
+                                                            mode="model",
+                                                            builder=mod,
+                                                        ),
+                                                    },
+                                                ),
+                                            ),
+                                            mod.return_stmt(mod.attr("response")),
+                                        )
+                                        if method.returns is not None
+                                        else ()
+                                    ),
                                 ],
                                 is_async=True,
+                                is_override=True,
                             )
                             for method in entrypoint.methods
                         ),
@@ -213,7 +249,7 @@ class FastAPIServicifyCodeGenerator(ServicifyCodeGenerator):
 
         mod.build()
 
-    def __build_client_module(self, context: GeneratorContext, pkg: PackageASTBuilder) -> None:
+    def __build_client_module(self, context: GeneratorContext, pkg: PackageASTBuilder, models: ModelDefBuilder) -> None:
         mod = pkg.module(ModuleInfo(None, "client"))
 
         abc_ref = ModuleInfo(pkg.info, "abc")
@@ -304,6 +340,7 @@ class FastAPIServicifyCodeGenerator(ServicifyCodeGenerator):
                                     ),
                                 ],
                                 is_async=True,
+                                is_override=True,
                             )
                             for method in entrypoint.methods
                         ),
