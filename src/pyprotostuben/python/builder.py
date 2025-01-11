@@ -1066,7 +1066,7 @@ class ModuleASTBuilder:
                 elif item is not None:
                     inlined.append(item)
 
-        self.__body.extend(inlined)
+        self.__body.extend(reversed(inlined))
 
     def build(
         self,
