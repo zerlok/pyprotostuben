@@ -17,6 +17,24 @@ class User:
     status: UserStatus
 
 
+@dataclass(frozen=True, kw_only=True)
+class SuperUser(User):
+    super_created_at: datetime
+
+
+@dataclass(frozen=True, kw_only=True)
+class HostInfo:
+    domain: str
+    user: SuperUser
+
+
+@dataclass(frozen=True, kw_only=True)
+class ChatRoom:
+    name: str
+    host: HostInfo
+    users: list[User]
+
+
 class Rectangle:
     def __init__(self, height: int, width: int) -> None:
         self.height = height

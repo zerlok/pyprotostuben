@@ -803,10 +803,94 @@ class ModuleASTBuilder:
     def pass_stmt(self) -> ast.Pass:
         return ast.Pass()
 
-    def dict_expr(self, items: t.Mapping[ast.expr, TypeRef]) -> ast.expr:
+    @t.overload
+    def set_expr(self, items: ast.expr, target: str, item: ast.expr) -> ast.expr: ...
+
+    @t.overload
+    def set_expr(self, items: t.Collection[ast.expr]) -> ast.expr: ...
+
+    def set_expr(
+        self,
+        items: t.Union[ast.expr, t.Collection[ast.expr]],
+        target: t.Optional[str] = None,
+        item: t.Optional[ast.expr] = None,
+    ) -> ast.expr:
+        if isinstance(items, ast.expr):
+            assert target is not None
+            assert item is not None
+
+            return ast.SetComp(
+                elt=item,
+                generators=[
+                    ast.comprehension(target=ast.Name(id=target, lineno=None), iter=items, ifs=[], is_async=False)
+                ],
+                lineno=None,
+            )
+
+        return ast.Set(
+            elts=[self.ref(item) for item in items],
+            lineno=None,
+        )
+
+    @t.overload
+    def list_expr(self, items: ast.expr, target: str, item: ast.expr) -> ast.expr: ...
+
+    @t.overload
+    def list_expr(self, items: t.Sequence[ast.expr]) -> ast.expr: ...
+
+    def list_expr(
+        self,
+        items: t.Union[ast.expr, t.Sequence[ast.expr]],
+        target: t.Optional[str] = None,
+        item: t.Optional[ast.expr] = None,
+    ) -> ast.expr:
+        if isinstance(items, ast.expr):
+            assert target is not None
+            assert item is not None
+
+            return ast.ListComp(
+                elt=item,
+                generators=[
+                    ast.comprehension(target=ast.Name(id=target, lineno=None), iter=items, ifs=[], is_async=False),
+                ],
+                lineno=None,
+            )
+
+        return ast.List(
+            elts=[self.ref(item) for item in items],
+            lineno=None,
+        )
+
+    @t.overload
+    def dict_expr(self, items: ast.expr, target: str, key: ast.expr, value: ast.expr) -> ast.expr: ...
+
+    @t.overload
+    def dict_expr(self, items: t.Mapping[ast.expr, ast.expr]) -> ast.expr: ...
+
+    def dict_expr(
+        self,
+        items: t.Union[ast.expr, t.Mapping[ast.expr, ast.expr]],
+        target: t.Optional[str] = None,
+        key: t.Optional[ast.expr] = None,
+        value: t.Optional[ast.expr] = None,
+    ) -> ast.expr:
+        if isinstance(items, ast.expr):
+            assert target is not None
+            assert key is not None
+            assert value is not None
+
+            return ast.DictComp(
+                key=key,
+                value=value,
+                generators=[
+                    ast.comprehension(target=ast.Name(id=target, lineno=None), iter=items, ifs=[], is_async=False),
+                ],
+                lineno=None,
+            )
+
         return ast.Dict(
-            keys=[key for key in items.keys()],
-            values=[value for value in items.values()],
+            keys=list(items.keys()),
+            values=list(items.values()),
             lineno=None,
         )
 

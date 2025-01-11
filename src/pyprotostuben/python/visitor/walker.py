@@ -13,8 +13,10 @@ from pyprotostuben.python.visitor.abc import TypeVisitor, TypeVisitorDecorator
 from pyprotostuben.python.visitor.model import (
     ContainerContext,
     EnumContext,
+    EnumValueContext,
     ScalarContext,
     StructureContext,
+    StructureFieldContext,
     empty,
 )
 
@@ -64,14 +66,14 @@ class DefaultTypeWalkerTrait(TypeWalkerTrait):
             return EnumContext(
                 type_=obj,
                 name=None,
-                values=tuple(EnumContext.ValueInfo(name=value, value=value) for value in t.get_args(obj)),
+                values=tuple(EnumValueContext(type_=None, name=value, value=value) for value in t.get_args(obj)),
             )
 
         if isinstance(obj, type) and issubclass(obj, enum.Enum):
             return EnumContext(
                 type_=obj,
                 name=obj.__name__,
-                values=tuple(EnumContext.ValueInfo(name=el.name, value=el.value) for el in obj),
+                values=tuple(EnumValueContext(type_=type(el), name=el.name, value=el.value) for el in obj),
                 description=inspect.getdoc(obj),
             )
 
@@ -105,7 +107,8 @@ class DefaultTypeWalkerTrait(TypeWalkerTrait):
                 type_=obj,
                 name=obj.__name__,
                 fields=tuple(
-                    StructureContext.FieldInfo(
+                    StructureFieldContext(
+                        type_=field.type,
                         name=field.name,
                         annotation=field.type,  # TODO: handle str case
                         default_value=field.default if field.default is not MISSING else empty(),
@@ -115,20 +118,7 @@ class DefaultTypeWalkerTrait(TypeWalkerTrait):
                 description=get_dataclass_doc(obj),
             )
 
-        return StructureContext(
-            type_=obj,
-            name=obj.__name__,
-            fields=tuple(
-                StructureContext.FieldInfo(
-                    name=name,
-                    annotation=member,
-                    description=inspect.getdoc(member),
-                )
-                for name, member in inspect.getmembers(obj)
-                if not name.startswith("_") and not inspect.isfunction(obj)
-            ),
-            description=inspect.getdoc(obj),
-        )
+        return None
 
 
 def get_dataclass_doc(dc: type[object]) -> t.Optional[str]:
@@ -173,8 +163,23 @@ class TypeWalker(TypeVisitor[T_contra], LoggerMixin):
         for nested in self.__nested:
             nested.enter_enum(context, meta)
 
+        for value in context.values:
+            self.visit_enum_value(value, meta)
+
         for nested in reversed(self.__nested):
             nested.leave_enum(context, meta)
+
+        log.info("visited")
+
+    def visit_enum_value(self, context: EnumValueContext, meta: T_contra) -> None:
+        log = self._log.bind_details(context=context)
+        log.debug("entered")
+
+        for nested in self.__nested:
+            nested.enter_enum_value(context, meta)
+
+        for nested in reversed(self.__nested):
+            nested.leave_enum_value(context, meta)
 
         log.info("visited")
 
@@ -201,10 +206,24 @@ class TypeWalker(TypeVisitor[T_contra], LoggerMixin):
             nested.enter_structure(context, meta)
 
         for field in context.fields:
-            self.walk(field.annotation, meta)
+            self.visit_structure_field(field, meta)
 
         for nested in reversed(self.__nested):
             nested.leave_structure(context, meta)
+
+        log.info("visited")
+
+    def visit_structure_field(self, context: StructureFieldContext, meta: T_contra) -> None:
+        log = self._log.bind_details(context=context)
+        log.debug("entered")
+
+        for nested in self.__nested:
+            nested.enter_structure_field(context, meta)
+
+        self.walk(context.annotation, meta)
+
+        for nested in reversed(self.__nested):
+            nested.leave_structure_field(context, meta)
 
         log.info("visited")
 

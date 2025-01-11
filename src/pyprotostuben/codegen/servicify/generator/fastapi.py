@@ -2,8 +2,8 @@ import ast
 import typing as t
 from itertools import chain
 
+from pyprotostuben.codegen.model import ModelDefBuilder, PydanticModelFactory
 from pyprotostuben.codegen.servicify.abc import ServicifyCodeGenerator
-from pyprotostuben.codegen.servicify.generator.model import ModelASTBuilder, PydanticModelFactory
 from pyprotostuben.codegen.servicify.model import EntrypointInfo, GeneratedFile, GeneratorContext, MethodInfo
 from pyprotostuben.python.builder import PackageASTBuilder
 from pyprotostuben.python.info import ModuleInfo, PackageInfo, TypeInfo
@@ -76,7 +76,7 @@ class FastAPIServicifyCodeGenerator(ServicifyCodeGenerator):
     ) -> None:
         mod = pkg.module(ModuleInfo(None, "model"))
 
-        models = ModelASTBuilder(PydanticModelFactory(mod))
+        models = ModelDefBuilder(PydanticModelFactory(mod))
         models.update(
             set(
                 chain.from_iterable(

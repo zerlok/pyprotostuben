@@ -25,14 +25,16 @@ class ScalarContext(_BaseContext):
 
 
 @dataclass(frozen=True, kw_only=True)
-class EnumContext(_BaseContext):
-    @dataclass(frozen=True, kw_only=True)
-    class ValueInfo:
-        name: t.Optional[str]
-        value: object
-
+class EnumValueContext(_BaseContext):
     name: t.Optional[str]
-    values: t.Sequence[ValueInfo]
+    value: object
+    description: t.Optional[str] = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class EnumContext(_BaseContext):
+    name: t.Optional[str]
+    values: t.Sequence[EnumValueContext]
     description: t.Optional[str] = None
 
 
@@ -43,16 +45,17 @@ class ContainerContext(_BaseContext):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StructureContext(_BaseContext):
-    @dataclass(frozen=True, kw_only=True)
-    class FieldInfo:
-        name: str
-        annotation: type[object]
-        default_value: object = _EMPTY
-        description: t.Optional[str] = None
-
+class StructureFieldContext(_BaseContext):
     name: str
-    fields: t.Sequence[FieldInfo]
+    annotation: type[object]
+    default_value: object = _EMPTY
+    description: t.Optional[str] = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class StructureContext(_BaseContext):
+    name: str
+    fields: t.Sequence[StructureFieldContext]
     description: t.Optional[str] = None
 
 
