@@ -58,10 +58,12 @@ class FastAPIServicifyCodeGenerator(ServicifyCodeGenerator):
                         )
                         if method.returns is not None
                         else mod.none_ref(),
+                        doc=method.doc,
                         is_async=True,
                     )
                     for method in entrypoint.methods
                 ],
+                doc=entrypoint.doc,
             )
             for entrypoint in context.entrypoints
         )
@@ -94,10 +96,12 @@ class FastAPIServicifyCodeGenerator(ServicifyCodeGenerator):
                 models.create(
                     name=self.__build_model_name(entrypoint, method, "Request"),
                     fields={param.name: models.resolve(param.annotation) for param in method.params},
+                    doc=f"Request model for `{entrypoint.name}.{method.name}` entrypoint method",
                 ),
                 models.create(
                     name=self.__build_model_name(entrypoint, method, "Response"),
                     fields={"payload": models.resolve(method.returns)},
+                    doc=f"Response model for `{entrypoint.name}.{method.name}` entrypoint method",
                 )
                 if method.returns is not None
                 else None,

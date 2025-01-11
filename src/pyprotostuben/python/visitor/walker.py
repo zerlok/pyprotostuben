@@ -72,6 +72,7 @@ class DefaultTypeWalkerTrait(TypeWalkerTrait):
                 type_=obj,
                 name=obj.__name__,
                 values=tuple(EnumContext.ValueInfo(name=el.name, value=el.value) for el in obj),
+                description=inspect.getdoc(obj),
             )
 
         return None
@@ -111,6 +112,7 @@ class DefaultTypeWalkerTrait(TypeWalkerTrait):
                     )
                     for field in get_dataclass_fields(obj)
                 ),
+                description=get_dataclass_doc(obj),
             )
 
         return StructureContext(
@@ -120,11 +122,27 @@ class DefaultTypeWalkerTrait(TypeWalkerTrait):
                 StructureContext.FieldInfo(
                     name=name,
                     annotation=member,
+                    description=inspect.getdoc(member),
                 )
-                for name, member in inspect.getmembers_static(obj)
+                for name, member in inspect.getmembers(obj)
                 if not name.startswith("_") and not inspect.isfunction(obj)
             ),
+            description=inspect.getdoc(obj),
         )
+
+
+def get_dataclass_doc(dc: type[object]) -> t.Optional[str]:
+    doc = inspect.getdoc(dc)
+    if doc is None:
+        return None
+
+    # skip `self`
+    params = list(inspect.signature(dc.__init__).parameters.values())[1:]
+    init_signature_doc = f"{dc.__name__}{inspect.Signature(params)}"
+
+    # Python dataclasses provides init constructor signature documentation if custom docstring is not set in class
+    # definition. Don't use it as docstring (e.g. don't expose internal implementation to API level).
+    return doc if doc != init_signature_doc else None
 
 
 class TypeWalker(TypeVisitor[T_contra], LoggerMixin):

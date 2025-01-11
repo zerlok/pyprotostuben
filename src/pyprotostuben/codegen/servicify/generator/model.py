@@ -24,6 +24,7 @@ class ModelFactory(metaclass=abc.ABCMeta):
     def create_model_def(
         self,
         name: str,
+        doc: t.Optional[str],
         fields: t.Mapping[str, TypeRef],
         defaults: t.Mapping[str, object],
         nested: t.Sequence[ast.stmt],
@@ -54,9 +55,11 @@ class ModelASTBuilder:
         fields: t.Mapping[str, TypeRef],
         defaults: t.Optional[t.Mapping[str, object]] = None,
         nested: t.Optional[t.Sequence[ast.stmt]] = None,
+        doc: t.Optional[str] = None,
     ) -> ast.stmt:
         return self.__factory.create_model_def(
             name=name,
+            doc=doc,
             fields=fields,
             defaults=defaults or {},
             nested=nested or [],
@@ -103,6 +106,7 @@ class DataclassModelFactory(ModelFactory):
     def create_model_def(
         self,
         name: str,
+        doc: t.Optional[str],
         fields: t.Mapping[str, TypeRef],
         defaults: t.Mapping[str, object],
         nested: t.Sequence[ast.stmt],
@@ -113,6 +117,7 @@ class DataclassModelFactory(ModelFactory):
             frozen=True,
             kw_only=True,
             fields=fields,
+            doc=doc,
         )
 
 
@@ -130,6 +135,7 @@ class PydanticModelFactory(ModelFactory):
     def create_model_def(
         self,
         name: str,
+        doc: t.Optional[str],
         fields: t.Mapping[str, TypeRef],
         defaults: t.Mapping[str, object],
         nested: t.Sequence[ast.stmt],
@@ -147,6 +153,7 @@ class PydanticModelFactory(ModelFactory):
                 ),
             ],
             bases=[self.__base_model],
+            doc=doc,
         )
 
 
@@ -255,6 +262,7 @@ class NestedTypesDataclassASTGenerator(TypeVisitorDecorator[GenContext]):
                 fields={field.name: type_ref for field, type_ref in zip(context.fields, inner.types)},
                 defaults={},
                 nested=inner.nested,
+                doc=context.description,
             )
         )
         meta.last.types.append(TypeInfo.build(None, context.name))

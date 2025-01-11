@@ -33,6 +33,7 @@ class EnumContext(_BaseContext):
 
     name: t.Optional[str]
     values: t.Sequence[ValueInfo]
+    description: t.Optional[str] = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -48,9 +49,11 @@ class StructureContext(_BaseContext):
         name: str
         annotation: type[object]
         default_value: object = _EMPTY
+        description: t.Optional[str] = None
 
     name: str
     fields: t.Sequence[FieldInfo]
+    description: t.Optional[str] = None
 
 
 def empty() -> object:
