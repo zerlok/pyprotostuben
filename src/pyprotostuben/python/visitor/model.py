@@ -16,7 +16,7 @@ _EMPTY: t.Final[_Empty] = _Empty()
 
 @dataclass(frozen=True, kw_only=True)
 class _BaseContext:
-    type_: object
+    type_: type[object]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -26,7 +26,7 @@ class ScalarContext(_BaseContext):
 
 @dataclass(frozen=True, kw_only=True)
 class EnumValueContext(_BaseContext):
-    name: t.Optional[str]
+    name: str
     value: object
     description: t.Optional[str] = None
 

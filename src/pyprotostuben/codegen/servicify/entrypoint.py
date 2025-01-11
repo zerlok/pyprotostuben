@@ -54,7 +54,7 @@ def inspect_source_dir(
 ) -> t.Iterable[EntrypointInfo]:
     sys.path.append(str(src))
     try:
-        stack: t.Deque[Path] = deque([src])
+        stack = deque[Path]([src])
 
         while stack:
             path = stack.pop()
@@ -95,7 +95,6 @@ def inspect_module(module: ModuleType) -> t.Iterable[EntrypointInfo]:
 
         yield EntrypointInfo(
             name=opts.name if opts.name is not None else name,
-            # version=opts.version or version(module_info.parts[0]),
             type_=type_info,
             methods=tuple(
                 inspect_method(member_name, member)

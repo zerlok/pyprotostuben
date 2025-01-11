@@ -4,7 +4,7 @@ import typing as t
 from collections import deque
 from dataclasses import dataclass
 
-from pyprotostuben.python.builder import ModuleASTBuilder, TypeRef
+from pyprotostuben.python.builder import ModuleASTBuilder, TypeRef, get_attrs
 from pyprotostuben.python.info import ModuleInfo, TypeInfo
 from pyprotostuben.python.visitor.abc import TypeVisitorDecorator
 from pyprotostuben.python.visitor.model import (
@@ -109,12 +109,15 @@ class DataclassModelFactory(ModelFactory):
     def __init__(self, builder: ModuleASTBuilder) -> None:
         self.__builder = builder
 
+    @t.override
     def create_enum_ref(self, elements: t.Sequence[str]) -> TypeRef:
         return self.__builder.literal_ref(*(self.__builder.const(el) for el in elements))
 
+    @t.override
     def create_container_ref(self, container: type[object], inners: t.Sequence[TypeRef]) -> TypeRef:
         return self.__builder.generic_ref(TypeInfo.from_type(container), *inners)
 
+    @t.override
     def create_model_def(
         self,
         name: str,
@@ -132,6 +135,7 @@ class DataclassModelFactory(ModelFactory):
             doc=doc,
         )
 
+    @t.override
     def create_model_ref(self, name: str) -> TypeRef:
         return TypeInfo.build(self.__builder.info, name)
 
@@ -141,12 +145,15 @@ class PydanticModelFactory(ModelFactory):
         self.__builder = builder
         self.__base_model = TypeInfo.build(ModuleInfo(None, "pydantic"), "BaseModel")
 
+    @t.override
     def create_enum_ref(self, elements: t.Sequence[str]) -> TypeRef:
         return self.__builder.literal_ref(*(self.__builder.const(el) for el in elements))
 
+    @t.override
     def create_container_ref(self, container: type[object], inners: t.Sequence[TypeRef]) -> TypeRef:
         return self.__builder.generic_ref(TypeInfo.from_type(container), *inners)
 
+    @t.override
     def create_model_def(
         self,
         name: str,
@@ -171,6 +178,7 @@ class PydanticModelFactory(ModelFactory):
             doc=doc,
         )
 
+    @t.override
     def create_model_ref(self, name: str) -> TypeRef:
         return TypeInfo.build(self.__builder.info, name)
 
@@ -191,7 +199,7 @@ class GenContext:
         return self.stack[-1]
 
     def enter(self, name: t.Optional[str] = None) -> Item:
-        context = self.Item(name=name, nested=list(), types=list(), attrs=list())
+        context = self.Item(name=name, nested=[], types=[], attrs=[])
         self.stack.append(context)
 
         return context
@@ -211,29 +219,37 @@ class ModelASTGenerator(TypeVisitorDecorator[GenContext]):
         self.__registry = registry
         self.__hierarchy = hierarchy
 
+    @t.override
     def enter_scalar(self, context: ScalarContext, meta: GenContext) -> None:
         pass
 
+    @t.override
     def leave_scalar(self, context: ScalarContext, meta: GenContext) -> None:
         self.__add_model(meta, context.type_, [], TypeInfo.from_type(context.type_))
 
-    def enter_enum(self, context: EnumContext, meta: GenContext) -> None:
+    @t.override
+    def enter_enum(self, _: EnumContext, meta: GenContext) -> None:
         meta.enter()
 
+    @t.override
     def leave_enum(self, context: EnumContext, meta: GenContext) -> None:
         inner = meta.leave()
         ref = self.__factory.create_enum_ref([val.name for val in context.values])
         self.__add_model(meta, context.type_, inner.nested, ref)
 
+    @t.override
     def enter_enum_value(self, context: EnumValueContext, meta: GenContext) -> None:
         pass
 
+    @t.override
     def leave_enum_value(self, context: EnumValueContext, meta: GenContext) -> None:
         pass
 
-    def enter_container(self, context: ContainerContext, meta: GenContext) -> None:
+    @t.override
+    def enter_container(self, _: ContainerContext, meta: GenContext) -> None:
         meta.enter()
 
+    @t.override
     def leave_container(self, context: ContainerContext, meta: GenContext) -> None:
         inner = meta.leave()
         ref = self.__factory.create_container_ref(context.origin, inner.types)
@@ -241,9 +257,11 @@ class ModelASTGenerator(TypeVisitorDecorator[GenContext]):
         for inner_type, inner_stmt in zip(context.inners, inner.nested):
             self.__add_model(meta, inner_type, [inner_stmt], ref)
 
-    def enter_structure(self, context: StructureContext, meta: GenContext) -> None:
+    @t.override
+    def enter_structure(self, _: StructureContext, meta: GenContext) -> None:
         meta.enter()
 
+    @t.override
     def leave_structure(self, context: StructureContext, meta: GenContext) -> None:
         inner = meta.leave()
         ref = self.__factory.create_model_ref(context.name)
@@ -256,9 +274,11 @@ class ModelASTGenerator(TypeVisitorDecorator[GenContext]):
         )
         self.__add_model(meta, context.type_, [model_def], ref)
 
+    @t.override
     def enter_structure_field(self, context: StructureFieldContext, meta: GenContext) -> None:
         pass
 
+    @t.override
     def leave_structure_field(self, context: StructureFieldContext, meta: GenContext) -> None:
         pass
 
@@ -295,60 +315,86 @@ class InitExprContext:
 
 
 class AssignExprGenerator(TypeVisitorDecorator[InitExprContext]):
-    def __init__(self, builder: ModuleASTBuilder, resolver: t.Callable[[type[object]], TypeInfo]) -> None:
+    def __init__(self, builder: ModuleASTBuilder, resolver: t.Callable[[type[object]], TypeRef]) -> None:
         self.__builder = builder
         self.__resolver = resolver
 
+    @t.override
     def enter_scalar(self, context: ScalarContext, meta: InitExprContext) -> None:
         pass
 
+    @t.override
     def leave_scalar(self, context: ScalarContext, meta: InitExprContext) -> None:
         meta.last.exprs.append(meta.last.source)
 
+    @t.override
     def enter_enum(self, context: EnumContext, meta: InitExprContext) -> None:
         meta.enter(meta.last.source)
 
+    @t.override
     def leave_enum(self, context: EnumContext, meta: InitExprContext) -> None:
         scope = meta.leave()
         # TODO: support t.Literal
         meta.last.exprs.append(self.__builder.attr(scope.source, "name"))
 
+    @t.override
     def enter_enum_value(self, context: EnumValueContext, meta: InitExprContext) -> None:
         pass
 
+    @t.override
     def leave_enum_value(self, context: EnumValueContext, meta: InitExprContext) -> None:
         pass
 
+    @t.override
     def enter_container(self, context: ContainerContext, meta: InitExprContext) -> None:
-        queue = deque([meta.last.source])
-        parts = ["item"]
+        if str(context.type_).startswith("typing.Optional"):
+            source = meta.last.source
 
-        while queue:
-            item = queue.pop()
+        elif issubclass(context.origin, t.Mapping):
+            source = self.__builder.attr("_".join((*get_attrs(meta.last.source), "value")))
 
-            if isinstance(item, ast.Attribute):
-                queue.append(item.value)
-                parts.append(item.attr)
+        else:
+            source = self.__builder.attr("_".join((*get_attrs(meta.last.source), "item")))
 
-            elif isinstance(item, ast.Name):
-                parts.append(item.id)
+        meta.enter(source)
 
-        meta.enter(self.__builder.attr("_".join(reversed(parts))))
-
+    @t.override
     def leave_container(self, context: ContainerContext, meta: InitExprContext) -> None:
         # TODO: set / list / dict compr
         inner = meta.leave()
-        meta.last.exprs.append(
-            self.__builder.list_expr(
-                items=meta.last.source,
-                target=inner.source,
-                item=inner.exprs[0],
-            )
-        )
+        item = inner.exprs[0]
 
+        if str(context.type_).startswith("typing.Optional"):
+            expr = self.__builder.ternary_not_none_expr(body=item, test=meta.last.source)
+
+        elif issubclass(context.origin, t.Sequence):
+            expr = self.__builder.list_expr(items=meta.last.source, target=inner.source, item=item)
+
+        elif issubclass(context.origin, t.Mapping):
+            key_var = "_".join((*get_attrs(meta.last.source), "key"))
+            expr = self.__builder.dict_expr(
+                items=self.__builder.call(func=self.__builder.attr(meta.last.source, "items")),
+                target=self.__builder.tuple_expr(
+                    self.__builder.attr(key_var),
+                    inner.source,
+                ),
+                key=self.__builder.attr(key_var),
+                value=inner.exprs[1],
+            )
+
+        elif issubclass(context.origin, t.Collection):
+            expr = self.__builder.set_expr(items=meta.last.source, target=inner.source, item=item)
+
+        else:
+            raise ValueError(context, meta)
+
+        meta.last.exprs.append(expr)
+
+    @t.override
     def enter_structure(self, context: StructureContext, meta: InitExprContext) -> None:
         meta.enter(meta.last.source)
 
+    @t.override
     def leave_structure(self, context: StructureContext, meta: InitExprContext) -> None:
         nested = meta.leave()
         meta.last.exprs.append(
@@ -358,9 +404,11 @@ class AssignExprGenerator(TypeVisitorDecorator[InitExprContext]):
             )
         )
 
+    @t.override
     def enter_structure_field(self, context: StructureFieldContext, meta: InitExprContext) -> None:
         meta.enter(self.__builder.attr(meta.last.source, context.name))
 
+    @t.override
     def leave_structure_field(self, context: StructureFieldContext, meta: InitExprContext) -> None:
         nested = meta.leave()
         meta.last.exprs.append(nested.exprs[0])

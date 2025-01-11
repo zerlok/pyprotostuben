@@ -254,6 +254,23 @@ class ModuleASTSubscriber(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
 
+def get_attrs(expr: ast.expr) -> t.Sequence[str]:
+    queue = deque([expr])
+    parts = list[str]()
+
+    while queue:
+        item = queue.pop()
+
+        if isinstance(item, ast.Attribute):
+            queue.append(item.value)
+            parts.append(item.attr)
+
+        elif isinstance(item, ast.Name):
+            parts.append(item.id)
+
+    return tuple(reversed(parts))
+
+
 class ModuleASTBuilder:
     def __init__(
         self,
@@ -835,6 +852,21 @@ class ModuleASTBuilder:
     def pass_stmt(self) -> ast.Pass:
         return ast.Pass()
 
+    def ternary_not_none_expr(
+        self,
+        body: ast.expr,
+        test: ast.expr,
+        or_else: t.Optional[ast.expr] = None,
+    ) -> ast.expr:
+        return ast.IfExp(
+            test=ast.Compare(left=test, ops=[ast.IsNot()], comparators=[self.none_ref()]),
+            body=body,
+            orelse=or_else if or_else is not None else self.none_ref(),
+        )
+
+    def tuple_expr(self, *items: ast.expr) -> ast.expr:
+        return ast.Tuple(elts=list(items))
+
     @t.overload
     def set_expr(self, items: ast.expr, target: ast.expr, item: ast.expr) -> ast.expr: ...
 
@@ -854,12 +886,10 @@ class ModuleASTBuilder:
             return ast.SetComp(
                 elt=item,
                 generators=[ast.comprehension(target=target, iter=items, ifs=[], is_async=False)],
-                lineno=None,
             )
 
         return ast.Set(
             elts=[self.ref(item) for item in items],
-            lineno=None,
         )
 
     @t.overload
@@ -881,12 +911,10 @@ class ModuleASTBuilder:
             return ast.ListComp(
                 elt=item,
                 generators=[ast.comprehension(target=target, iter=items, ifs=[], is_async=False)],
-                lineno=None,
             )
 
         return ast.List(
             elts=[self.ref(item) for item in items],
-            lineno=None,
         )
 
     @t.overload
@@ -911,13 +939,11 @@ class ModuleASTBuilder:
                 key=key,
                 value=value,
                 generators=[ast.comprehension(target=target, iter=items, ifs=[], is_async=False)],
-                lineno=None,
             )
 
         return ast.Dict(
             keys=list(items.keys()),
             values=list(items.values()),
-            lineno=None,
         )
 
     def context_manager_decorator_ref(self, *, is_async: bool = False) -> ast.expr:
@@ -1083,8 +1109,9 @@ class ModuleASTBuilder:
                 if arg.kind is FuncArgInfo.Kind.POS
             ],
             defaults=[
-                self.ref(arg.default) if arg.kind is FuncArgInfo.Kind.POS and arg.default is not None else None
+                self.ref(arg.default)
                 for arg in (args or [])
+                if arg.kind is FuncArgInfo.Kind.POS and arg.default is not None
             ],
             kwonlyargs=[
                 ast.arg(

@@ -20,7 +20,7 @@ class FastAPIServicifyCodeGenerator(ServicifyCodeGenerator):
         self.__build_abc_module(context, builder)
         model_builder = self.__build_model_module(context, builder)
         self.__build_server_module(context, builder, model_builder)
-        self.__build_client_module(context, builder, model_builder)
+        self.__build_client_module(context, builder)
 
         return [
             GeneratedFile(
@@ -195,12 +195,14 @@ class FastAPIServicifyCodeGenerator(ServicifyCodeGenerator):
                                 else mod.none_ref(),
                                 body=[
                                     *(
-                                        models.assign_stmt(
-                                            target=f"input_{param.name}",
-                                            source=mod.attr("request", param.name),
-                                            type_=param.annotation,
-                                            mode="original",
-                                            builder=mod,
+                                        mod.assign(
+                                            f"input_{param.name}",
+                                            value=models.assign_expr(
+                                                source=mod.attr("request", param.name),
+                                                type_=param.annotation,
+                                                mode="original",
+                                                builder=mod,
+                                            ),
                                         )
                                         for param in method.params
                                     ),
@@ -249,7 +251,7 @@ class FastAPIServicifyCodeGenerator(ServicifyCodeGenerator):
 
         mod.build()
 
-    def __build_client_module(self, context: GeneratorContext, pkg: PackageASTBuilder, models: ModelDefBuilder) -> None:
+    def __build_client_module(self, context: GeneratorContext, pkg: PackageASTBuilder) -> None:
         mod = pkg.module(ModuleInfo(None, "client"))
 
         abc_ref = ModuleInfo(pkg.info, "abc")
@@ -299,8 +301,8 @@ class FastAPIServicifyCodeGenerator(ServicifyCodeGenerator):
                                                     func=mod.attr("request", "model_dump"),
                                                     kwargs={
                                                         "mode": mod.const("json"),
-                                                        "by_alias": mod.const(True),
-                                                        "exclude_none": mod.const(True),
+                                                        "by_alias": mod.const(value=True),
+                                                        "exclude_none": mod.const(value=True),
                                                     },
                                                 ),
                                             },
@@ -331,8 +333,8 @@ class FastAPIServicifyCodeGenerator(ServicifyCodeGenerator):
                                                 func=mod.attr("request", "model_dump"),
                                                 kwargs={
                                                     "mode": mod.const("json"),
-                                                    "by_alias": mod.const(True),
-                                                    "exclude_none": mod.const(True),
+                                                    "by_alias": mod.const(value=True),
+                                                    "exclude_none": mod.const(value=True),
                                                 },
                                             ),
                                         },

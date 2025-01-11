@@ -84,6 +84,15 @@ ignore = [
     "S101", # allow asserts for tests checks and mypy help
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# CLI is built with `click` framework
+"src/pyprotostuben/codegen/servicify/cli.py" = [
+    "FBT001", # CLI commands can use non keyword flag options
+    "PLR0913", # CLI commands can use a lots of arguments and options
+]
+"tests/**" = [
+    "PLR0913", # test functions can use a lots of arguments and fixtures
+]
 
 [tool.mypy]
 files = ["src", "tests"]

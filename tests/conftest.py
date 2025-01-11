@@ -8,14 +8,7 @@ from pyprotostuben.python.info import ModuleInfo, PackageInfo
 
 
 def parse_ast(s: str) -> ast.AST:
-    # code may be indented, so normalize it (e.g. the following code strings will be parsed as equivalent AST).
-    # my_code1 = """
-    #            class Foo:
-    #                bar: Bar
-    #            """
-    # my_code2 = """class Foo:
-    #     bar: Bar"""
-    # my_code3 = """class Foo:\n    bar: Bar"""
+    """Parse a block of code. The code may be indented, parser will shift the content to the left."""
 
     lines = list[str]()
     offset: t.Optional[int] = None

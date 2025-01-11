@@ -6,7 +6,6 @@ import uuid
 from dataclasses import MISSING, is_dataclass
 from dataclasses import fields as get_dataclass_fields
 from datetime import date, datetime, time, timedelta
-from functools import lru_cache
 
 from pyprotostuben.logging import LoggerMixin
 from pyprotostuben.python.visitor.abc import TypeVisitor, TypeVisitorDecorator
@@ -42,7 +41,6 @@ class TypeWalkerTrait(metaclass=abc.ABCMeta):
 
 
 class DefaultTypeWalkerTrait(TypeWalkerTrait):
-    @lru_cache
     def extract_scalar(self, obj: object) -> t.Optional[ScalarContext]:
         if obj is None or obj is type(None):
             return ScalarContext(type_=type(None))
@@ -50,38 +48,50 @@ class DefaultTypeWalkerTrait(TypeWalkerTrait):
         if obj is Ellipsis:
             return ScalarContext(type_=type(Ellipsis))
 
-        if obj is t.Any or (
-            isinstance(obj, type)
-            and issubclass(
-                obj, (bytes, bytearray, bool, int, float, complex, str, time, date, datetime, timedelta, uuid.UUID)
-            )
+        if isinstance(obj, type) and issubclass(
+            obj, (bytes, bytearray, bool, int, float, complex, str, time, date, datetime, timedelta, uuid.UUID)
         ):
             return ScalarContext(type_=obj)
 
+        if obj is t.Any:
+            return ScalarContext(type_=object)
+
         return None
 
-    @lru_cache
     def extract_enum(self, obj: object) -> t.Optional[EnumContext]:
         if t.get_origin(obj) is t.Literal:
             return EnumContext(
-                type_=obj,
+                type_=t.cast(type[object], obj),
                 name=None,
-                values=tuple(EnumValueContext(type_=None, name=value, value=value) for value in t.get_args(obj)),
+                values=tuple(
+                    EnumValueContext(
+                        type_=type(value),
+                        name=value,
+                        value=value,
+                    )
+                    for value in t.get_args(obj)
+                ),
             )
 
         if isinstance(obj, type) and issubclass(obj, enum.Enum):
             return EnumContext(
                 type_=obj,
                 name=obj.__name__,
-                values=tuple(EnumValueContext(type_=type(el), name=el.name, value=el.value) for el in obj),
-                description=inspect.getdoc(obj),
+                values=tuple(
+                    EnumValueContext(
+                        type_=obj,
+                        name=el.name,
+                        value=el.value,
+                    )
+                    for el in obj
+                ),
+                description=get_enum_doc(obj),
             )
 
         return None
 
-    @lru_cache
     def extract_container(self, obj: object) -> t.Optional[ContainerContext]:
-        if isinstance(obj, t.NewType):
+        if isinstance(obj, type) and isinstance(obj, t.NewType):
             return ContainerContext(
                 type_=obj,
                 origin=obj.__supertype__,
@@ -90,35 +100,52 @@ class DefaultTypeWalkerTrait(TypeWalkerTrait):
 
         if (origin := t.get_origin(obj)) is not None and origin not in {t.Literal, t.Generic}:
             return ContainerContext(
-                type_=obj,
+                type_=t.cast(type[object], obj),
                 origin=origin,
                 inners=t.get_args(obj),
             )
 
         return None
 
-    @lru_cache
     def extract_structure(self, obj: object) -> t.Optional[StructureContext]:
         if not isinstance(obj, type):
             return None
 
         if is_dataclass(obj):
-            return StructureContext(
-                type_=obj,
-                name=obj.__name__,
-                fields=tuple(
+            fields = list[StructureFieldContext]()
+
+            for field in get_dataclass_fields(obj):
+                # TODO: handle str case (forward ref)
+                if isinstance(field.type, str):
+                    raise TypeError(field.type, field, obj)
+
+                fields.append(
                     StructureFieldContext(
                         type_=field.type,
                         name=field.name,
-                        annotation=field.type,  # TODO: handle str case
+                        annotation=field.type,
                         default_value=field.default if field.default is not MISSING else empty(),
                     )
-                    for field in get_dataclass_fields(obj)
-                ),
+                )
+
+            return StructureContext(
+                type_=obj,
+                name=obj.__name__,
+                fields=tuple(fields),
                 description=get_dataclass_doc(obj),
             )
 
+        # TODO: support more structured types, e.g. attrs or simple python classes with properties
+
         return None
+
+
+def get_enum_doc(type_: type[enum.Enum]) -> t.Optional[str]:
+    doc = inspect.getdoc(type_)
+
+    # Python enums provides base enum class documentation if custom docstring is not set in custom enum definition.
+    # Don't use it as docstring.
+    return doc if doc != inspect.getdoc(enum.Enum) else None
 
 
 def get_dataclass_doc(dc: type[object]) -> t.Optional[str]:

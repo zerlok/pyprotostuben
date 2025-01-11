@@ -56,7 +56,6 @@ GenKind = t.Literal["fastapi"]
 
 
 @cli.command()
-@pass_cli_context
 @ARG_SOURCE
 @click.argument(
     "kind",
@@ -77,7 +76,6 @@ GenKind = t.Literal["fastapi"]
     default=False,
 )
 def gen(
-    context: CLIContext,
     src: Path,
     kind: GenKind,
     output: t.Optional[Path],
@@ -94,8 +92,11 @@ def gen(
         package=package,
     )
 
-    # gen = BrokRPCServicifyCodeGenerator()
-    gen = FastAPIServicifyCodeGenerator()
+    if kind == "fastapi":
+        gen = FastAPIServicifyCodeGenerator()
+    else:
+        t.assert_never(kind)
+
     for file in gen.generate(gen_context):
         if dry_run:
             continue
@@ -117,8 +118,10 @@ def show(
     for entrypoint in inspect_source_dir(src, ignore_module_on_import_error=ignore_module_on_import_error):
         if entrypoint.methods:
             type_ = entrypoint.type_
+            assert type_.module is not None
+
             click.echo(
-                f"* {entrypoint.name} ({type_.module.qualname}:{'.'.join(type_.ns)}) "
+                f"* {entrypoint.name} ({type_.module.qualname}:{'.'.join(type_.ns)})"
                 f"{' ' if entrypoint.doc else ''}{entrypoint.doc or ''}"
             )
 

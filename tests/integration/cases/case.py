@@ -38,7 +38,7 @@ class CaseProvider(metaclass=abc.ABCMeta):
 
 class DirCaseProvider(CaseProvider):
     # NOTE: case provider constructor has many settings, no need to add extra class.
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         *,
         filename: str,

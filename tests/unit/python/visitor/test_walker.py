@@ -5,7 +5,14 @@ from unittest.mock import ANY, MagicMock, call, create_autospec
 import pytest
 
 from pyprotostuben.python.visitor.abc import TypeVisitorDecorator
-from pyprotostuben.python.visitor.model import ContainerContext, EnumContext, ScalarContext, StructureContext
+from pyprotostuben.python.visitor.model import (
+    ContainerContext,
+    EnumContext,
+    EnumValueContext,
+    ScalarContext,
+    StructureContext,
+    StructureFieldContext,
+)
 from pyprotostuben.python.visitor.walker import DefaultTypeWalkerTrait, TypeWalker, TypeWalkerTrait
 from tests.stub.structs import User, UserStatus
 
@@ -13,7 +20,7 @@ T = t.TypeVar("T")
 
 
 @pytest.mark.parametrize(
-    ["type_", "expected_calls"],
+    ("type_", "expected_calls"),
     [
         pytest.param(
             None,
@@ -50,6 +57,42 @@ T = t.TypeVar("T")
             id="list[str]",
         ),
         pytest.param(
+            t.Optional[list[list[str]]],
+            [
+                call.enter_container(
+                    ContainerContext(
+                        type_=t.cast(type[object], t.Optional[list[list[str]]]),
+                        origin=t.cast(type[object], t.Union),
+                        inners=(
+                            list[list[str]],
+                            type(None),
+                        ),
+                    ),
+                    ANY,
+                ),
+                call.enter_container(ContainerContext(type_=list[list[str]], origin=list, inners=(list[str],)), ANY),
+                call.enter_container(ContainerContext(type_=list[str], origin=list, inners=(str,)), ANY),
+                call.enter_scalar(ScalarContext(type_=str), ANY),
+                call.leave_scalar(ScalarContext(type_=str), ANY),
+                call.leave_container(ContainerContext(type_=list[str], origin=list, inners=(str,)), ANY),
+                call.leave_container(ContainerContext(type_=list[list[str]], origin=list, inners=(list[str],)), ANY),
+                call.enter_scalar(ScalarContext(type_=type(None)), ANY),
+                call.leave_scalar(ScalarContext(type_=type(None)), ANY),
+                call.leave_container(
+                    ContainerContext(
+                        type_=t.cast(type[object], t.Optional[list[list[str]]]),
+                        origin=t.cast(type[object], t.Union),
+                        inners=(
+                            list[list[str]],
+                            type(None),
+                        ),
+                    ),
+                    ANY,
+                ),
+            ],
+            id="t.Optional[list[list[str]]]",
+        ),
+        pytest.param(
             tuple[list[int], list[str]],
             [
                 call.enter_container(
@@ -76,22 +119,26 @@ T = t.TypeVar("T")
             [
                 call.enter_enum(
                     EnumContext(
-                        type_=t.Literal["foo", "bar"],
+                        type_=t.cast(type[object], t.Literal["foo", "bar"]),
                         name=None,
                         values=(
-                            EnumContext.ValueInfo(name="foo", value="foo"),
-                            EnumContext.ValueInfo(name="bar", value="bar"),
+                            EnumValueContext(type_=str, name="foo", value="foo"),
+                            EnumValueContext(type_=str, name="bar", value="bar"),
                         ),
                     ),
                     ANY,
                 ),
+                call.enter_enum_value(EnumValueContext(type_=str, name="foo", value="foo"), ANY),
+                call.leave_enum_value(EnumValueContext(type_=str, name="foo", value="foo"), ANY),
+                call.enter_enum_value(EnumValueContext(type_=str, name="bar", value="bar"), ANY),
+                call.leave_enum_value(EnumValueContext(type_=str, name="bar", value="bar"), ANY),
                 call.leave_enum(
                     EnumContext(
-                        type_=t.Literal["foo", "bar"],
+                        type_=t.cast(type[object], t.Literal["foo", "bar"]),
                         name=None,
                         values=(
-                            EnumContext.ValueInfo(name="foo", value="foo"),
-                            EnumContext.ValueInfo(name="bar", value="bar"),
+                            EnumValueContext(type_=str, name="foo", value="foo"),
+                            EnumValueContext(type_=str, name="bar", value="bar"),
                         ),
                     ),
                     ANY,
@@ -107,21 +154,27 @@ T = t.TypeVar("T")
                         type_=UserStatus,
                         name="UserStatus",
                         values=(
-                            EnumContext.ValueInfo(name="UNVERIFIED", value=1),
-                            EnumContext.ValueInfo(name="VERIFIED", value=2),
-                            EnumContext.ValueInfo(name="BANNED", value=3),
+                            EnumValueContext(type_=UserStatus, name="UNVERIFIED", value=1),
+                            EnumValueContext(type_=UserStatus, name="VERIFIED", value=2),
+                            EnumValueContext(type_=UserStatus, name="BANNED", value=3),
                         ),
                     ),
                     ANY,
                 ),
+                call.enter_enum_value(EnumValueContext(type_=UserStatus, name="UNVERIFIED", value=1), ANY),
+                call.leave_enum_value(EnumValueContext(type_=UserStatus, name="UNVERIFIED", value=1), ANY),
+                call.enter_enum_value(EnumValueContext(type_=UserStatus, name="VERIFIED", value=2), ANY),
+                call.leave_enum_value(EnumValueContext(type_=UserStatus, name="VERIFIED", value=2), ANY),
+                call.enter_enum_value(EnumValueContext(type_=UserStatus, name="BANNED", value=3), ANY),
+                call.leave_enum_value(EnumValueContext(type_=UserStatus, name="BANNED", value=3), ANY),
                 call.leave_enum(
                     EnumContext(
                         type_=UserStatus,
                         name="UserStatus",
                         values=(
-                            EnumContext.ValueInfo(name="UNVERIFIED", value=1),
-                            EnumContext.ValueInfo(name="VERIFIED", value=2),
-                            EnumContext.ValueInfo(name="BANNED", value=3),
+                            EnumValueContext(type_=UserStatus, name="UNVERIFIED", value=1),
+                            EnumValueContext(type_=UserStatus, name="VERIFIED", value=2),
+                            EnumValueContext(type_=UserStatus, name="BANNED", value=3),
                         ),
                     ),
                     ANY,
@@ -137,53 +190,75 @@ T = t.TypeVar("T")
                         type_=User,
                         name="User",
                         fields=(
-                            StructureContext.FieldInfo(name="id", annotation=int),
-                            StructureContext.FieldInfo(name="username", annotation=str),
-                            StructureContext.FieldInfo(name="created_at", annotation=datetime),
-                            StructureContext.FieldInfo(name="status", annotation=UserStatus),
+                            StructureFieldContext(type_=int, name="id", annotation=int),
+                            StructureFieldContext(type_=str, name="username", annotation=str),
+                            StructureFieldContext(type_=datetime, name="created_at", annotation=datetime),
+                            StructureFieldContext(type_=UserStatus, name="status", annotation=UserStatus),
                         ),
                     ),
                     ANY,
                 ),
+                call.enter_structure_field(StructureFieldContext(type_=int, name="id", annotation=int), ANY),
                 call.enter_scalar(ScalarContext(type_=int), ANY),
                 call.leave_scalar(ScalarContext(type_=int), ANY),
+                call.leave_structure_field(StructureFieldContext(type_=int, name="id", annotation=int), ANY),
+                call.enter_structure_field(StructureFieldContext(type_=str, name="username", annotation=str), ANY),
                 call.enter_scalar(ScalarContext(type_=str), ANY),
                 call.leave_scalar(ScalarContext(type_=str), ANY),
+                call.leave_structure_field(StructureFieldContext(type_=str, name="username", annotation=str), ANY),
+                call.enter_structure_field(
+                    StructureFieldContext(type_=datetime, name="created_at", annotation=datetime), ANY
+                ),
                 call.enter_scalar(ScalarContext(type_=datetime), ANY),
                 call.leave_scalar(ScalarContext(type_=datetime), ANY),
+                call.leave_structure_field(
+                    StructureFieldContext(type_=datetime, name="created_at", annotation=datetime), ANY
+                ),
+                call.enter_structure_field(
+                    StructureFieldContext(type_=UserStatus, name="status", annotation=UserStatus), ANY
+                ),
                 call.enter_enum(
                     EnumContext(
                         type_=UserStatus,
                         name="UserStatus",
                         values=(
-                            EnumContext.ValueInfo(name="UNVERIFIED", value=1),
-                            EnumContext.ValueInfo(name="VERIFIED", value=2),
-                            EnumContext.ValueInfo(name="BANNED", value=3),
+                            EnumValueContext(type_=UserStatus, name="UNVERIFIED", value=1),
+                            EnumValueContext(type_=UserStatus, name="VERIFIED", value=2),
+                            EnumValueContext(type_=UserStatus, name="BANNED", value=3),
                         ),
                     ),
                     ANY,
                 ),
+                call.enter_enum_value(EnumValueContext(type_=UserStatus, name="UNVERIFIED", value=1), ANY),
+                call.leave_enum_value(EnumValueContext(type_=UserStatus, name="UNVERIFIED", value=1), ANY),
+                call.enter_enum_value(EnumValueContext(type_=UserStatus, name="VERIFIED", value=2), ANY),
+                call.leave_enum_value(EnumValueContext(type_=UserStatus, name="VERIFIED", value=2), ANY),
+                call.enter_enum_value(EnumValueContext(type_=UserStatus, name="BANNED", value=3), ANY),
+                call.leave_enum_value(EnumValueContext(type_=UserStatus, name="BANNED", value=3), ANY),
                 call.leave_enum(
                     EnumContext(
                         type_=UserStatus,
                         name="UserStatus",
                         values=(
-                            EnumContext.ValueInfo(name="UNVERIFIED", value=1),
-                            EnumContext.ValueInfo(name="VERIFIED", value=2),
-                            EnumContext.ValueInfo(name="BANNED", value=3),
+                            EnumValueContext(type_=UserStatus, name="UNVERIFIED", value=1),
+                            EnumValueContext(type_=UserStatus, name="VERIFIED", value=2),
+                            EnumValueContext(type_=UserStatus, name="BANNED", value=3),
                         ),
                     ),
                     ANY,
+                ),
+                call.leave_structure_field(
+                    StructureFieldContext(type_=UserStatus, name="status", annotation=UserStatus), ANY
                 ),
                 call.leave_structure(
                     StructureContext(
                         type_=User,
                         name="User",
                         fields=(
-                            StructureContext.FieldInfo(name="id", annotation=int),
-                            StructureContext.FieldInfo(name="username", annotation=str),
-                            StructureContext.FieldInfo(name="created_at", annotation=datetime),
-                            StructureContext.FieldInfo(name="status", annotation=UserStatus),
+                            StructureFieldContext(type_=int, name="id", annotation=int),
+                            StructureFieldContext(type_=str, name="username", annotation=str),
+                            StructureFieldContext(type_=datetime, name="created_at", annotation=datetime),
+                            StructureFieldContext(type_=UserStatus, name="status", annotation=UserStatus),
                         ),
                     ),
                     ANY,
@@ -234,7 +309,7 @@ def test_type_walker_propagates_same_context(
 ) -> None:
     type_walker.walk(type_, context)
 
-    assert set(mc.args[-1] for mc in nested.method_calls) == {context}
+    assert {mc.args[-1] for mc in nested.method_calls} == {context}
 
 
 @pytest.fixture
