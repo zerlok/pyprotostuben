@@ -1,30 +1,46 @@
+import abc
 import ast
 import typing as t
 from collections import deque
+from contextlib import contextmanager
+from dataclasses import dataclass
 from functools import cache, cached_property
+from itertools import chain
 
-from pyprotostuben.python.info import ModuleInfo, TypeInfo
-
-TypeRef = t.Union[ast.expr, type[object], TypeInfo, "TypeRefBuilder"]
+from pyprotostuben.python.info import ModuleInfo, PackageInfo, TypeInfo
 
 
-def main() -> None:
-    with ModBuilder.create(ModuleInfo(None, "simple")) as _:
-        with _.class_def("Foo") as foo:
-            with _.dataclass_def("Bar") as bar:
-                _.field_def("spam", int)
+class ASTBuilder(metaclass=abc.ABCMeta):
+    @abc.abstractmethod
+    def build(self) -> ast.AST:
+        raise NotImplementedError
 
-            _.field_def("bars", bar.ref().list().optional())
 
-            foo.init_attrs_def({"my_bar": bar.ref()})
+class ExpressionASTBuilder(ASTBuilder, metaclass=abc.ABCMeta):
+    @t.override
+    @abc.abstractmethod
+    def build(self) -> ast.expr:
+        raise NotImplementedError
 
-            with foo.method_def("do_stuff").pos_arg("x", int).returns(str):
-                _.assign_stmt("y", _.call(str, [_.attr("x")]))
-                _.return_stmt(_.attr("y"))
 
-            foo.abstract_method_def("do_buzz").returns(object).stub()
+class StatementASTBuilder(ASTBuilder, metaclass=abc.ABCMeta):
+    @t.override
+    @abc.abstractmethod
+    def build(self) -> ast.stmt:
+        raise NotImplementedError
 
-        print(ast.unparse(_.build()))
+
+class Referencable(metaclass=abc.ABCMeta):
+    @abc.abstractmethod
+    def ref(self) -> ExpressionASTBuilder:
+        raise NotImplementedError
+
+
+Expr = t.Union[ast.expr, ExpressionASTBuilder]
+Stmt = t.Union[ast.stmt, StatementASTBuilder, Expr]
+
+
+TypeRef = t.Union[Expr, type[object], TypeInfo, Referencable]
 
 
 class Predefs:
@@ -210,136 +226,138 @@ def get_predefs() -> Predefs:
     return Predefs()
 
 
-class ScopeStack:
-    def __init__(self, info: ModuleInfo) -> None:
-        self.__info = info
-        self.__names = list[t.Optional[str]]()
-        self.__scopes = deque[list[ast.stmt]]([])
+@dataclass()
+class Scope:
+    name: t.Optional[str]
+    body: t.MutableSequence[ast.stmt]
+
+
+@dataclass()
+class BuildContext:
+    packages: t.MutableSequence[PackageInfo]
+    dependencies: t.MutableSet[ModuleInfo]
+    scopes: t.MutableSequence[Scope]
+    _module: t.Optional[ModuleInfo] = None
 
     @property
     def module(self) -> ModuleInfo:
-        return self.__info
+        assert self._module is not None
+        return self._module
 
-    def enter(self, name: t.Optional[str], body: list[ast.stmt]) -> list[ast.stmt]:
-        self.__names.append(name)
-        self.__scopes.append(body)
-        return body
+    def enter_package(self, info: PackageInfo) -> t.Self:
+        assert self._module is None
+        self.packages.append(info)
+        return self
 
-    def leave(self) -> list[ast.stmt]:
-        self.__names.pop()
-        body = self.__scopes.pop()
-        return body
+    def leave_package(self) -> t.Self:
+        assert self._module is None
+        self.packages.pop()
+        return self
+
+    def enter_module(self, info: ModuleInfo, body: t.MutableSequence[ast.stmt]) -> Scope:
+        assert self._module is None
+        assert len(self.scopes) == 0
+        self._module = info
+        return self.enter_scope(None, body)
+
+    def leave_module(self) -> Scope:
+        assert len(self.scopes) == 1
+        scope = self.leave_scope()
+        self._module = None
+        self.dependencies.clear()
+        return scope
+
+    def enter_scope(self, name: t.Optional[str], body: t.MutableSequence[ast.stmt]) -> Scope:
+        scope = Scope(name, body)
+        self.scopes.append(scope)
+        return scope
+
+    def leave_scope(self) -> Scope:
+        scope = self.scopes.pop()
+        return scope
 
     @property
     def namespace(self) -> t.Sequence[str]:
-        return tuple(name for name in self.__names if name is not None)
+        return tuple(scope.name for scope in self.scopes if scope.name is not None)
 
     @property
-    def current(self) -> t.MutableSequence[ast.stmt]:
-        return self.__scopes[-1]
+    def current_scope(self) -> Scope:
+        return self.scopes[-1]
 
-    def append(self, stmt: t.Optional[ast.stmt]) -> None:
+    @property
+    def current_body(self) -> t.MutableSequence[ast.stmt]:
+        return self.current_scope.body
+
+    def append_body(self, stmt: t.Optional[ast.stmt]) -> None:
         if stmt is not None:
-            self.current.append(stmt)
+            self.current_body.append(stmt)
 
-    def extend(self, *stmts: t.Optional[ast.stmt]) -> None:
-        self.current.extend(stmt for stmt in stmts if stmt is not None)
+    def extend_body(self, stmts: t.Sequence[t.Optional[ast.stmt]]) -> None:
+        self.current_body.extend(stmt for stmt in stmts if stmt is not None)
 
 
-class TypeRefResolver:
-    def __init__(self, scopes: ScopeStack) -> None:
-        self.__scopes = scopes
-        self.__deps = set[ModuleInfo]()
+class ASTResolver:
+    def __init__(self, context: BuildContext) -> None:
+        self.__context = context
 
-    def resolve(self, ref: TypeRef) -> ast.expr:
+    def expr(self, ref: TypeRef) -> ast.expr:
+        if isinstance(ref, Referencable):
+            ref = ref.ref()
+
+        if isinstance(ref, ExpressionASTBuilder):
+            ref = ref.build()
+
         if isinstance(ref, ast.expr):
             return ref
-
-        if isinstance(ref, TypeRefBuilder):
-            return ref.build()
 
         if isinstance(ref, type):
             ref = TypeInfo.from_type(ref)
 
-        if ref.module != self.__scopes.module and ref.module is not None:
-            self.__deps.add(ref.module)
+        if ref.module is not None and ref.module != self.__context.module:
+            self.__context.dependencies.add(ref.module)
 
         else:
             ref = TypeInfo(None, ref.ns)
 
-        return _build_attr_expr(*(ref.module.parts if ref.module is not None else ()), *ref.ns)
+        head, *tail = (*(ref.module.parts if ref.module is not None else ()), *ref.ns)
 
-    @property
-    def dependencies(self) -> t.Sequence[ModuleInfo]:
-        return sorted(self.__deps, key=self.__get_dep_sort_key)
+        expr: ast.expr = ast.Name(id=head)
+        for attr in tail:
+            expr = ast.Attribute(attr=attr, value=expr)
 
-    def __get_dep_sort_key(self, module: ModuleInfo) -> str:
-        return module.qualname
+        return expr
+
+    def stmts(self, *stmts: Stmt, docs: t.Optional[t.Sequence[str]] = None) -> list[ast.stmt]:
+        body = [
+            stmt
+            if isinstance(stmt, ast.stmt)
+            else stmt.build()
+            if isinstance(stmt, StatementASTBuilder)
+            else ast.Expr(value=self.expr(stmt))
+            for stmt in stmts
+        ]
+
+        if docs:
+            body.insert(0, ast.Expr(value=ast.Constant(value="\n".join(docs))))
+
+        if not body:
+            body.append(ast.Pass())
+
+        return body
 
 
-class BaseASTBuilder:
-    def __init__(self, resolver: TypeRefResolver) -> None:
+class TypeRefBuilder(ExpressionASTBuilder):
+    def __init__(self, resolver: ASTResolver, info: TypeInfo) -> None:
         self.__resolver = resolver
-
-    @property
-    def predefs(self) -> Predefs:
-        return get_predefs()
-
-    def resolve(self, ref: TypeRef) -> ast.expr:
-        return self.__resolver.resolve(ref)
-
-    def attr(self, head: t.Union[str, ast.expr], *tail: str) -> ast.expr:
-        return _build_attr_expr(head, *tail)
-
-    def const(self, value: object) -> ast.expr:
-        return ast.Constant(value=value)
-
-    def call(
-        self,
-        func: TypeRef,
-        args: t.Optional[t.Sequence[ast.expr]] = None,
-        kwargs: t.Optional[t.Mapping[str, ast.expr]] = None,
-    ) -> ast.expr:
-        return ast.Call(
-            func=self.resolve(func),
-            args=list(args or ()),
-            keywords=[ast.keyword(arg=key, value=value) for key, value in (kwargs or {}).items()],
-            lineno=0,
-        )
-
-    def generic_type(self, generic: TypeRef, *args: TypeRef) -> ast.expr:
-        if len(args) == 0:
-            return self.resolve(generic)
-
-        if len(args) == 1:
-            return ast.Subscript(value=self.resolve(generic), slice=self.resolve(args[0]))
-
-        return ast.Subscript(value=self.resolve(generic), slice=ast.Tuple(elts=[self.resolve(arg) for arg in args]))
-
-    def optional_type(self, of_type: TypeRef) -> ast.expr:
-        return self.generic_type(self.predefs.optional_ref, of_type)
-
-    def sequence_type(self, of_type: TypeRef, *, mutable: bool = False) -> ast.expr:
-        return self.generic_type(self.predefs.mutable_sequence_ref if mutable else self.predefs.sequence_ref, of_type)
-
-    def ellipsis_stmt(self) -> ast.stmt:
-        return ast.Expr(value=ast.Constant(value=...))
-
-    def pass_stmt(self) -> ast.stmt:
-        return ast.Pass()
-
-
-class TypeRefBuilder:
-    def __init__(self, resolver: TypeRefResolver, info: TypeInfo) -> None:
-        self.__impl = BaseASTBuilder(resolver)
         self.__info = info
-        self.__wraps: t.Callable[[TypeInfo], ast.expr] = self.__impl.resolve
+        self.__wraps: t.Callable[[TypeInfo], ast.expr] = self.__resolver.expr
+        self.__base = BaseASTBuilder(resolver)
 
     def optional(self) -> "TypeRefBuilder":
         inner = self.__wraps
 
         def wrap(info: TypeInfo) -> ast.expr:
-            return self.__impl.optional_type(inner(info))
+            return self.__base.optional_type(inner(info))
 
         self.__wraps = wrap
 
@@ -349,59 +367,196 @@ class TypeRefBuilder:
         inner = self.__wraps
 
         def wrap(info: TypeInfo) -> ast.expr:
-            return self.__impl.generic_type(list, inner(info))
+            return self.__base.generic_type(list, inner(info))
 
         self.__wraps = wrap
 
         return self
 
+    def context_manager(self, is_async: bool = False) -> "TypeRefBuilder":
+        inner = self.__wraps
+
+        def wrap(info: TypeInfo) -> ast.expr:
+            return self.__base.context_manager_type(inner(info), is_async=is_async)
+
+        self.__wraps = wrap
+
+        return self
+
+    def attr(self, *tail: str) -> "AttrASTBuilder":
+        return AttrASTBuilder(self.__resolver, self).attr(*tail)
+
+    def init(
+        self,
+        args: t.Optional[t.Sequence[Expr]] = None,
+        kwargs: t.Optional[t.Mapping[str, Expr]] = None,
+    ) -> "CallASTBuilder":
+        return self.attr().call(args, kwargs)
+
+    @t.override
     def build(self) -> ast.expr:
         return self.__wraps(self.__info)
 
 
-class BodyASTBuilder(BaseASTBuilder):
-    def __init__(
-        self,
-        scopes: ScopeStack,
-        resolver: TypeRefResolver,
-        name: t.Optional[str],
-        body: list[ast.stmt],
-    ) -> None:
-        super().__init__(resolver)
-        self.__scopes = scopes
+class AttrASTBuilder(ExpressionASTBuilder):
+    def __init__(self, resolver: ASTResolver, node: t.Union[str, TypeRef]) -> None:
         self.__resolver = resolver
-        self.__name = name
-        self.__body = body
+        self.__head = node
+        self.__parts = list[str]()
 
-    def ref(self) -> TypeRefBuilder:
-        return TypeRefBuilder(self.__resolver, TypeInfo.build(self.__scopes.module, self.__name))
+    @property
+    def parts(self) -> t.Sequence[str]:
+        if isinstance(self.__head, str):
+            return self.__head, *self.__parts
 
-    def docstring(self, value: str) -> t.Self:
-        self.__doc = value
-        self.__body.insert(0, ast.Expr(value=ast.Constant(value=value)))
+        queue = deque([self.__head])
+        parts = list[str]()
+
+        while queue:
+            item = queue.pop()
+
+            if isinstance(item, ast.Attribute):
+                queue.append(item.value)
+                parts.append(item.attr)
+
+            elif isinstance(item, ast.Name):
+                parts.append(item.id)
+
+        return *reversed(parts), *self.__parts
+
+    def attr(self, *tail: str) -> t.Self:
+        self.__parts.extend(tail)
         return self
 
-    def class_def(
+    def call(
         self,
-        name: str,
-        bases: t.Optional[t.Sequence[TypeRef]] = None,
-    ) -> "ClassHeadASTBuilder":
-        node = ast.ClassDef(
-            name=name,
-            bases=[self.resolve(base) for base in (bases or ())],
-            keywords=[],
-            body=[],
-            decorator_list=[],
-            type_params=[],
+        args: t.Optional[t.Sequence[Expr]] = None,
+        kwargs: t.Optional[t.Mapping[str, Expr]] = None,
+    ) -> "CallASTBuilder":
+        builder = CallASTBuilder(
+            resolver=self.__resolver,
+            func=self,
         )
-        self.__scopes.append(node)
 
-        return ClassHeadASTBuilder(self.__scopes, self.__resolver, node)
+        for arg in args or ():
+            builder.arg(arg)
+
+        for name, kwarg in (kwargs or {}).items():
+            builder.kwarg(name, kwarg)
+
+        return builder
+
+    @t.override
+    def build(self) -> ast.expr:
+        expr: ast.expr = ast.Name(id=self.__head) if isinstance(self.__head, str) else self.__resolver.expr(self.__head)
+
+        for part in self.__parts:
+            expr = ast.Attribute(attr=part, value=expr)
+
+        return expr
+
+
+class CallASTBuilder(ExpressionASTBuilder):
+    def __init__(self, resolver: ASTResolver, func: TypeRef) -> None:
+        self.__resolver = resolver
+        self.__func = func
+        self.__args = list[Expr]()
+        self.__kwargs = dict[str, Expr]()
+
+    def arg(self, expr: Expr) -> t.Self:
+        self.__args.append(self.__resolver.expr(expr))
+        return self
+
+    def kwarg(self, name: str, expr: Expr) -> t.Self:
+        self.__kwargs[name] = expr
+        return self
+
+    def build(self) -> ast.expr:
+        return ast.Call(
+            func=self.__resolver.expr(self.__func),
+            args=[self.__resolver.expr(arg) for arg in self.__args],
+            keywords=[ast.keyword(arg=key, value=self.__resolver.expr(kwarg)) for key, kwarg in self.__kwargs.items()],
+            lineno=0,
+        )
+
+
+class BaseASTBuilder:
+    def __init__(self, resolver: ASTResolver) -> None:
+        self._resolver = resolver
+
+    def const(self, value: object) -> ast.expr:
+        assert not isinstance(value, ast.AST)
+        return ast.Constant(value=value)
+
+    def attr(self, head: t.Union[str, TypeRef], *tail: str) -> AttrASTBuilder:
+        return AttrASTBuilder(self._resolver, head).attr(*tail)
+
+    def call(
+        self,
+        func: TypeRef,
+        args: t.Optional[t.Sequence[Expr]] = None,
+        kwargs: t.Optional[t.Mapping[str, Expr]] = None,
+    ) -> CallASTBuilder:
+        return self.attr(func).call(args, kwargs)
+
+    def generic_type(self, generic: TypeRef, *args: TypeRef) -> ast.expr:
+        if len(args) == 0:
+            return self._expr(generic)
+
+        if len(args) == 1:
+            return ast.Subscript(
+                value=self._expr(generic),
+                slice=self._expr(args[0]),
+            )
+
+        return ast.Subscript(
+            value=self._expr(generic),
+            slice=ast.Tuple(
+                elts=[self._expr(arg) for arg in args],
+            ),
+        )
+
+    def optional_type(self, of_type: TypeRef) -> ast.expr:
+        return self.generic_type(get_predefs().optional_ref, of_type)
+
+    def sequence_type(self, of_type: TypeRef, *, mutable: bool = False) -> ast.expr:
+        return self.generic_type(get_predefs().mutable_sequence_ref if mutable else get_predefs().sequence_ref, of_type)
+
+    def iterator_type(self, of_type: TypeRef, *, is_async: bool = False) -> ast.expr:
+        return self.generic_type(get_predefs().async_iterator_ref if is_async else get_predefs().iterator_ref, of_type)
+
+    def context_manager_type(self, of_type: TypeRef, *, is_async: bool = False) -> ast.expr:
+        return self.generic_type(
+            get_predefs().async_context_manager_ref if is_async else get_predefs().context_manager_ref,
+            of_type,
+        )
+
+    def ellipsis_stmt(self) -> ast.stmt:
+        return ast.Expr(value=ast.Constant(value=...))
+
+    def pass_stmt(self) -> ast.stmt:
+        return ast.Pass()
+
+    def _expr(self, expr: TypeRef) -> ast.expr:
+        return self._resolver.expr(expr)
+
+    def _stmt(self, stmt: Stmt) -> t.Sequence[ast.stmt]:
+        return self._resolver.stmts(stmt)
+
+
+class ScopeASTBuilder(BaseASTBuilder):
+    def __init__(self, context: BuildContext, resolver: ASTResolver) -> None:
+        super().__init__(resolver)
+        self.__context = context
+        self.__docs = list[str]()
+
+    def class_def(self, name: str) -> "ClassHeadASTBuilder":
+        return ClassHeadASTBuilder(self.__context, self._resolver, name)
 
     def dataclass_def(self, name: str, frozen: bool = False, kw_only: bool = False) -> "ClassHeadASTBuilder":
         return self.class_def(name).decorators(
             self.call(
-                func=self.predefs.dataclass_decorator_ref,
+                func=get_predefs().dataclass_decorator_ref,
                 kwargs={
                     "frozen": self.const(value=frozen),
                     "kw_only": self.const(value=kw_only),
@@ -409,129 +564,141 @@ class BodyASTBuilder(BaseASTBuilder):
             )
         )
 
-    def func_def(self, name: str) -> "FuncASTBuilder":
-        node = ast.FunctionDef(
-            name=name,
-            args=ast.arguments(
-                posonlyargs=[],
-                args=[],
-                defaults=[],
-                kwonlyargs=[],
-                kw_defaults=[],
-            ),
-            returns=None,
-            decorator_list=[],
-            body=[],
-            type_params=[],
-            lineno=0,
-        )
-        self.__scopes.append(node)
-
-        return FuncASTBuilder(self.__scopes, self.__resolver, node)
-
-    def async_func_def(self, name: str) -> "FuncASTBuilder":
-        node = ast.AsyncFunctionDef(
-            name=name,
-            args=ast.arguments(
-                posonlyargs=[],
-                args=[],
-                defaults=[],
-                kwonlyargs=[],
-                kw_defaults=[],
-            ),
-            returns=None,
-            decorator_list=[],
-            body=[],
-            type_params=[],
-            lineno=0,
-        )
-        self.__scopes.append(node)
-
-        return FuncASTBuilder(self.__scopes, self.__resolver, node)
+    def func_def(self, name: str) -> "FuncHeadASTBuilder":
+        return FuncHeadASTBuilder(self.__context, self._resolver, name)
 
     def field_def(self, name: str, annotation: TypeRef) -> ast.stmt:
         node = ast.AnnAssign(
             target=ast.Name(id=name),
-            annotation=self.resolve(annotation),
+            annotation=self._expr(annotation),
             value=None,
             simple=1,
         )
-        self.__scopes.append(node)
+        self.__context.append_body(node)
 
         return node
 
-    def assign_stmt(self, target: t.Union[str, ast.expr], value: ast.expr) -> ast.stmt:
+    def type_ref(self, base: t.Union[type[object], TypeInfo]) -> TypeRefBuilder:
+        return TypeRefBuilder(self._resolver, base if isinstance(base, TypeInfo) else TypeInfo.from_type(base))
+
+    def assign_stmt(self, target: t.Union[str, Expr], value: Expr) -> ast.stmt:
         node = ast.Assign(
-            targets=[ast.Name(id=target) if isinstance(target, str) else target],
-            value=value,
+            targets=[self._expr(self.attr(target))],
+            value=self._expr(value),
             type_comment=None,
             lineno=0,
         )
-        self.__scopes.append(node)
+        self.__context.append_body(node)
 
         return node
 
-    def return_stmt(self, value: ast.expr) -> ast.stmt:
+    def return_stmt(self, value: Expr) -> ast.stmt:
         node = ast.Return(
-            value=value,
+            value=self._expr(value),
             lineno=0,
         )
-        self.__scopes.append(node)
+        self.__context.append_body(node)
 
         return node
 
-    def yield_stmt(self, value: ast.expr) -> ast.stmt:
+    def yield_stmt(self, value: Expr) -> ast.stmt:
         node = ast.Expr(
             value=ast.Yield(
-                value=value,
+                value=self._expr(value),
                 lineno=0,
             ),
         )
-        self.__scopes.append(node)
+        self.__context.append_body(node)
 
         return node
 
 
-class ClassHeadASTBuilder:
-    def __init__(self, scopes: ScopeStack, resolver: TypeRefResolver, node: ast.ClassDef) -> None:
-        self.__scopes = scopes
+class ClassHeadASTBuilder(StatementASTBuilder):
+    def __init__(self, context: BuildContext, resolver: ASTResolver, name: str) -> None:
+        self.__context = context
         self.__resolver = resolver
-        self.__node = node
+        self.__name = name
+        self.__bases = list[TypeRef]()
+        self.__decorators = list[TypeRef]()
+        self.__keywords = dict[str, TypeRef]()
+        self.__docs = list[str]()
 
-    def inherits(self, *bases: t.Optional[TypeRef]) -> t.Self:
-        self.__node.bases.extend(self.__resolver.resolve(base) for base in bases if base is not None)
-        return self
-
-    def decorators(self, *items: t.Optional[TypeRef]) -> t.Self:
-        self.__node.decorator_list.extend(self.__resolver.resolve(item) for item in items if item is not None)
-        return self
-
-    def __enter__(self) -> "ClassBodyASTBuilder":
-        self.__scopes.enter(self.__node.name, self.__node.body)
-        return ClassBodyASTBuilder(self.__scopes, self.__resolver, self.__node)
+    def __enter__(self) -> "ClassScopeASTBuilder":
+        self.__context.enter_scope(self.__name, [])
+        return ClassScopeASTBuilder(self.__context, self.__resolver)
 
     def __exit__(self, *_: object) -> None:
-        body = self.__scopes.leave()
-        assert body is self.__node.body
+        stmts = self.__resolver.stmts(self)
 
+        self.__context.leave_scope()
+        self.__context.extend_body(stmts)
 
-class ClassBodyASTBuilder(BodyASTBuilder):
-    def __init__(self, scopes: ScopeStack, resolver: TypeRefResolver, node: ast.ClassDef) -> None:
-        super().__init__(scopes, resolver, node.name, node.body)
-        self.__node = node
+    def docstring(self, value: str) -> t.Self:
+        self.__docs.append(value)
+        return self
+
+    def abstract(self) -> t.Self:
+        return self.keywords(metaclass=get_predefs().abc_meta_ref)
+
+    def dataclass(self, frozen: bool = False, kw_only: bool = False) -> t.Self:
+        return self.decorators(
+            CallASTBuilder(self.__resolver, get_predefs().dataclass_decorator_ref)
+            .kwarg(
+                "frozen",
+                ast.Constant(value=frozen),
+            )
+            .kwarg(
+                "kw_only",
+                ast.Constant(value=kw_only),
+            )
+        )
 
     def inherits(self, *bases: t.Optional[TypeRef]) -> t.Self:
-        self.__node.bases.extend(self.resolve(base) for base in bases if base is not None)
+        self.__bases.extend(base for base in bases if base is not None)
         return self
 
     def decorators(self, *items: t.Optional[TypeRef]) -> t.Self:
-        self.__node.decorator_list.extend(self.resolve(item) for item in items if item is not None)
+        self.__decorators.extend(item for item in items if item is not None)
         return self
 
-    def init_def(self) -> "FuncASTBuilder":
-        return self.func_def("__init__").pos_arg("self").returns(self.const(None))
+    def keywords(self, **keywords: t.Optional[TypeRef]) -> t.Self:
+        self.__keywords.update({key: value for key, value in keywords.items() if value is not None})
+        return self
 
-    def init_attrs_def(self, attrs: t.Mapping[str, TypeRef]) -> "FuncASTBuilder":
+    @t.override
+    def build(self) -> ast.stmt:
+        return ast.ClassDef(
+            name=self.__name,
+            bases=[self.__resolver.expr(base) for base in self.__bases],
+            keywords=[
+                ast.keyword(arg=key, value=self.__resolver.expr(value)) for key, value in self.__keywords.items()
+            ],
+            body=self.__resolver.stmts(*self.__context.current_body, docs=self.__docs),
+            decorator_list=self.__build_decorators(),
+            type_params=[],
+        )
+
+    def __build_decorators(self) -> list[ast.expr]:
+        return [self.__resolver.expr(dec) for dec in self.__decorators]
+
+
+class ClassScopeASTBuilder(ScopeASTBuilder, Referencable):
+    def __init__(self, context: BuildContext, resolver: ASTResolver) -> None:
+        super().__init__(context, resolver)
+        self.__info = TypeInfo(context.module, context.namespace)
+
+    @t.override
+    def ref(self) -> TypeRefBuilder:
+        return TypeRefBuilder(self._resolver, self.__info)
+
+    def method_def(self, name: str) -> "FuncHeadASTBuilder":
+        return self.func_def(name).pos_arg("self")
+
+    def init_def(self) -> "FuncHeadASTBuilder":
+        return self.method_def("__init__").returns(self.const(None))
+
+    @contextmanager
+    def init_self_attrs_def(self, attrs: t.Mapping[str, TypeRef]) -> t.Iterator[ScopeASTBuilder]:
         init = self.init_def()
 
         for name, value in attrs.items():
@@ -541,122 +708,348 @@ class ClassBodyASTBuilder(BodyASTBuilder):
             for name, value in attrs.items():
                 init_body.assign_stmt(init_body.attr("self", f"__{name}"), value=init_body.attr(name))
 
-        return init
+            yield init_body
 
-    def method_def(self, name: str) -> "FuncASTBuilder":
-        return self.func_def(name).pos_arg("self")
+    def self_attr(self, head: str, *tail: str) -> AttrASTBuilder:
+        return self.attr("self", f"__{head}", *tail)
 
-    def async_method_def(self, name: str) -> "FuncASTBuilder":
-        return self.async_func_def(name).pos_arg("self")
+    def property_getter_def(self, name: str) -> "FuncHeadASTBuilder":
+        return self.func_def(name).pos_arg("self").decorators(get_predefs().property_ref)
 
-    def abstract_method_def(self, name: str) -> "FuncASTBuilder":
-        return self.func_def(name).pos_arg("self").decorators(self.predefs.abstractmethod_ref)
-
-    def async_abstract_method_def(self, name: str) -> "FuncASTBuilder":
-        return self.async_func_def(name).pos_arg("self").decorators(self.predefs.abstractmethod_ref)
-
-    def class_method_def(self, name: str) -> "FuncASTBuilder":
-        return self.func_def(name).pos_arg("cls").decorators(self.predefs.classmethod_ref)
-
-    def async_class_method_def(self, name: str) -> "FuncASTBuilder":
-        return self.async_func_def(name).pos_arg("cls").decorators(self.predefs.classmethod_ref)
-
-    def property_getter_def(self, name: str) -> "FuncASTBuilder":
-        return self.func_def(name).pos_arg("self").decorators(self.predefs.property_ref)
-
-    def property_setter_def(self, name: str) -> "FuncASTBuilder":
+    def property_setter_def(self, name: str) -> "FuncHeadASTBuilder":
         return self.func_def(name).pos_arg("self").decorators(self.attr(name, "setter"))
 
 
-class FuncASTBuilder:
+class FuncHeadASTBuilder(StatementASTBuilder):
     def __init__(
         self,
-        scopes: ScopeStack,
-        resolver: TypeRefResolver,
-        node: t.Union[ast.FunctionDef, ast.AsyncFunctionDef],
+        context: BuildContext,
+        resolver: ASTResolver,
+        name: str,
     ) -> None:
-        self.__scopes = scopes
+        self.__context = context
         self.__resolver = resolver
-        self.__node = node
+        self.__name = name
+        self.__decorators = list[TypeRef]()
+        self.__args = list[tuple[str, t.Optional[TypeRef]]]()
+        self.__kwargs = dict[str, TypeRef]()
+        self.__defaults = dict[str, Expr]()
+        self.__returns: t.Optional[TypeRef] = None
+        self.__is_async = False
+        self.__is_abstract = False
+        self.__is_override = False
+        self.__iterator_cm = False
+        self.__is_stub = False
+        self.__is_not_implemented = False
+        self.__docs = list[str]()
+
+    def __enter__(self) -> ScopeASTBuilder:
+        self.__context.enter_scope(self.__name, [])
+        return ScopeASTBuilder(self.__context, self.__resolver)
+
+    def __exit__(self, *_: object) -> None:
+        stmts = self.__resolver.stmts(self)
+
+        self.__context.leave_scope()
+        self.__context.extend_body(stmts)
+
+    def async_(self) -> t.Self:
+        self.__is_async = True
+        return self
+
+    def abstract(self) -> t.Self:
+        self.__is_abstract = True
+        return self
+
+    def override(self) -> t.Self:
+        self.__is_override = True
+        return self
+
+    def docstring(self, value: str) -> t.Self:
+        self.__docs.append(value)
+        return self
 
     def decorators(self, *items: t.Optional[TypeRef]) -> t.Self:
-        self.__node.decorator_list.extend(self.__resolver.resolve(item) for item in items if item is not None)
+        self.__decorators.extend(item for item in items if item is not None)
         return self
 
     def pos_arg(
         self,
         name: str,
         annotation: t.Optional[TypeRef] = None,
-        default: t.Optional[ast.expr] = None,
+        default: t.Optional[Expr] = None,
     ) -> t.Self:
-        self.__node.args.args.append(
-            ast.arg(
-                arg=name,
-                annotation=self.__resolver.resolve(annotation) if annotation is not None else None,
-            )
-        )
+        self.__args.append((name, annotation))
 
         if default is not None:
-            self.__node.args.defaults.append(default)
+            self.__defaults[name] = default
 
         return self
 
-    def returns(self, ref: TypeRef) -> t.Self:
-        self.__node.returns = self.__resolver.resolve(ref)
-
+    def returns(self, ret: TypeRef) -> t.Self:
+        self.__returns = ret
         return self
 
-    def stub(self) -> None:
-        self.__node.body = [ast.Expr(value=ast.Constant(value=...))]
+    def context_manager(self) -> t.Self:
+        self.__iterator_cm = True
+        return self
 
-    def __enter__(self) -> BodyASTBuilder:
-        self.__scopes.enter(self.__node.name, self.__node.body)
-        return BodyASTBuilder(self.__scopes, self.__resolver, self.__node.name, self.__node.body)
+    def stub(self) -> t.Self:
+        self.__is_stub = True
+        return self
 
-    def __exit__(self, *_: object) -> None:
-        body = self.__scopes.leave()
-        assert body is self.__node.body
+    def not_implemented(self) -> t.Self:
+        self.__is_not_implemented = True
+        return self
+
+    def build(self) -> ast.stmt:
+        if self.__is_async:
+            return ast.AsyncFunctionDef(  # type: ignore[call-overload,no-any-return,unused-ignore]
+                # type_comment and type_params has default value each in 3.12 and not available in 3.9
+                name=self.__name,
+                args=self.__build_args(),
+                decorator_list=self.__build_decorators(),
+                returns=self.__build_returns(),
+                body=self.__build_body(),
+                lineno=0,
+            )
+
+        return ast.FunctionDef(  # type: ignore[call-overload,no-any-return,unused-ignore]
+            # type_comment and type_params has default value each in 3.12 and not available in 3.9
+            name=self.__name,
+            decorator_list=self.__build_decorators(),
+            args=self.__build_args(),
+            body=self.__build_body(),
+            returns=self.__build_returns(),
+            lineno=0,
+        )
+
+    def __build_decorators(self) -> list[ast.expr]:
+        head_decorators: list[TypeRef] = []
+        last_decorators: list[TypeRef] = []
+
+        if self.__is_override:
+            head_decorators.append(get_predefs().override_decorator_ref)
+
+        if self.__is_abstract:
+            last_decorators.append(get_predefs().abstractmethod_ref)
+
+        if self.__iterator_cm:
+            last_decorators.append(
+                get_predefs().async_context_manager_decorator
+                if self.__is_async
+                else get_predefs().context_manager_decorator
+            )
+
+        return [self.__resolver.expr(dec) for dec in chain(head_decorators, self.__decorators, last_decorators)]
+
+    def __build_args(self) -> ast.arguments:
+        return ast.arguments(
+            posonlyargs=[],
+            args=[
+                ast.arg(
+                    arg=arg,
+                    annotation=self.__resolver.expr(annotation) if annotation is not None else None,
+                )
+                for arg, annotation in self.__args
+            ],
+            defaults=[self.__resolver.expr(self.__defaults[arg]) for arg, _ in self.__args if arg in self.__defaults],
+            kwonlyargs=[
+                ast.arg(
+                    arg=arg,
+                    annotation=self.__resolver.expr(annotation) if annotation is not None else None,
+                )
+                for arg, annotation in self.__kwargs.items()
+            ],
+            kw_defaults=[self.__resolver.expr(self.__defaults[arg]) for arg in self.__kwargs if arg in self.__defaults],
+        )
+
+    def __build_returns(self) -> t.Optional[ast.expr]:
+        if self.__returns is None:
+            return None
+
+        ret = self.__resolver.expr(self.__returns)
+        if self.__iterator_cm:
+            ret = BaseASTBuilder(self.__resolver).iterator_type(ret, is_async=self.__is_async)
+
+        return ret
+
+    def __build_body(self) -> list[ast.stmt]:
+        body: t.Sequence[Stmt]
+
+        if self.__is_stub:
+            body = [ast.Expr(value=ast.Constant(value=...))]
+
+        elif self.__is_not_implemented:
+            body = [ast.Raise(exc=ast.Name(id="NotImplementedError"))]
+
+        else:
+            body = self.__context.current_body
+
+        return self.__resolver.stmts(*body, docs=self.__docs)
 
 
-class ModBuilder(BodyASTBuilder):
-    @classmethod
-    def create(cls, info: ModuleInfo) -> "ModBuilder":
-        node = ast.Module(body=[], type_ignores=[])
-        scopes = ScopeStack(info)
-        resolver = TypeRefResolver(scopes)
-
-        return cls(scopes, resolver, node)
-
-    def __init__(self, scopes: ScopeStack, resolver: TypeRefResolver, node: ast.Module) -> None:
-        super().__init__(scopes, resolver, None, scopes.enter(None, node.body))
-        self.__scopes = scopes
+class ModuleASTBuilder(ScopeASTBuilder, ASTBuilder):
+    def __init__(self, context: BuildContext, resolver: ASTResolver, info: ModuleInfo, body: list[ast.stmt]) -> None:
+        super().__init__(context, resolver)
+        self.__context = context
         self.__resolver = resolver
-        self.__node = node
+        self.__info = info
+        self.__body = body
+        self.__docs = list[str]()
 
     def __enter__(self) -> t.Self:
+        self.__context.enter_module(self.__info, self.__body)
         return self
 
     def __exit__(self, *_: object) -> None:
-        pass
+        scope = self.__context.leave_module()
+        assert scope.body is self.__body
 
-    def import_stmt(self, module: ModuleInfo) -> ast.Import:
-        return ast.Import(names=[ast.alias(name=module.qualname)])
+    @property
+    def info(self) -> ModuleInfo:
+        return self.__info
 
-    def build(self) -> ast.Module:
-        self.__node.body = [
-            *(self.import_stmt(dep) for dep in self.__resolver.dependencies),
-            *self.__node.body,
-        ]
+    def docstring(self, value: str) -> t.Self:
+        self.__docs.append(value)
+        return self
 
-        return self.__node
+    def import_stmt(self, info: ModuleInfo) -> ast.Import:
+        return ast.Import(names=[ast.alias(name=info.qualname)])
+
+    @t.override
+    def build(self) -> ast.AST:
+        return ast.Module(
+            body=[
+                *(self.import_stmt(dep) for dep in sorted(self.__context.dependencies, key=self.__get_dep_sort_key)),
+                *self.__resolver.stmts(*self.__body, docs=self.__docs),
+            ],
+            type_ignores=[],
+        )
+
+    def __get_dep_sort_key(self, info: ModuleInfo) -> str:
+        return info.qualname
 
 
-def _build_attr_expr(head: t.Union[str, ast.expr], *tail: str) -> ast.expr:
-    expr: ast.expr = ast.Name(id=head) if isinstance(head, str) else head
-    for attr in tail:
-        expr = ast.Attribute(attr=attr, value=expr)
+class PackageASTBuilder:
+    def __init__(
+        self,
+        context: BuildContext,
+        resolver: ASTResolver,
+        info: PackageInfo,
+        modules: dict[ModuleInfo, ModuleASTBuilder],
+    ) -> None:
+        self.__context = context
+        self.__resolver = resolver
+        self.__info = info
+        self.__modules = modules
 
-    return expr
+    def __enter__(self) -> t.Self:
+        self.__context.enter_package(self.__info)
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.__context.leave_package()
+
+    @property
+    def info(self) -> PackageInfo:
+        return self.__info
+
+    def sub(self, name: str) -> t.Self:
+        return self.__class__(self.__context, self.__resolver, PackageInfo(self.__info, name), self.__modules)
+
+    def init(self) -> ModuleASTBuilder:
+        return self.module("__init__")
+
+    def module(self, name: str) -> ModuleASTBuilder:
+        info = ModuleInfo(self.__info, name)
+
+        builder = self.__modules.get(info)
+        if builder is None:
+            builder = ModuleASTBuilder(self.__context, self.__resolver, info, [])
+
+        return builder
+
+    def build(self) -> t.Mapping[ModuleInfo, ast.AST]:
+        return {
+            info: builder.build()
+            for info, builder in self.__modules.items()
+            if info.qualname.startswith(self.__info.qualname)
+        }
+
+
+def package(info: t.Union[str, PackageInfo], parent: t.Optional[PackageInfo] = None) -> PackageASTBuilder:
+    pkg_info = info if isinstance(info, PackageInfo) else PackageInfo(parent, info)
+    context = BuildContext([pkg_info], set(), deque())
+    resolver = ASTResolver(context)
+    return PackageASTBuilder(context, resolver, pkg_info, {})
+
+
+def module(info: t.Union[str, ModuleInfo], parent: t.Optional[PackageInfo] = None) -> ModuleASTBuilder:
+    mod_info = info if isinstance(info, ModuleInfo) else ModuleInfo(parent, info)
+    context = BuildContext([], set(), deque())
+    resolver = ASTResolver(context)
+    return ModuleASTBuilder(context, resolver, mod_info, [])
+
+
+def render(node: t.Union[ast.AST, ASTBuilder]) -> str:
+    if isinstance(node, ast.AST):
+        clean_node = node
+
+    elif isinstance(node, ASTBuilder):
+        clean_node = node.build()
+
+    else:
+        t.assert_never(node)
+
+    return ast.unparse(clean_node)
+
+
+def main1() -> None:
+    with package("simple") as pkg:
+        with pkg.module("foo") as foo:
+            with foo.class_def("Foo") as foo_class:
+                with (
+                    foo_class.method_def("do_stuff")
+                    .pos_arg("spam", str)
+                    .returns(foo.type_ref(str).context_manager())
+                    .abstract()
+                    .not_implemented()
+                ):
+                    pass
+
+            print(foo.info)
+            print(render(foo))
+
+        with pkg.module("bar") as bar:
+            with bar.class_def("Bar").inherits(foo_class) as _:
+                with _.method_def("do_stuff").pos_arg("spam", str).returns(str).context_manager().override().stub():
+                    pass
+
+            print(bar.info)
+            print(render(bar))
+
+
+def main() -> None:
+    with module("simple") as _:
+        with _.class_def("Foo") as foo:
+            with _.dataclass_def("Bar") as bar:
+                _.field_def("spam", int)
+
+            _.field_def("bars", bar.ref().list().optional())
+
+            with foo.init_self_attrs_def({"my_bar": bar}):
+                pass
+
+            with foo.method_def("do_stuff").pos_arg("x", int).returns(str):
+                _.assign_stmt("y", _.call(str, [_.attr("x")]))
+                _.assign_stmt(_.attr("self", "__some"), bar.ref().init().kwarg("x", _.attr("x")))
+                _.return_stmt(_.attr("y").attr("__str__").call())
+
+            with foo.method_def("do_buzz").abstract().returns(object).stub():
+                pass
+
+        print(ast.unparse(_.build()))
 
 
 if __name__ == "__main__":
