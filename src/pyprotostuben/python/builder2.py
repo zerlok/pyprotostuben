@@ -945,6 +945,10 @@ class MethodScopeASTBuilder(FuncScopeASTBuilder):
 
 
 class MethodSignatureASTBuilder(_BaseFuncSignatureASTBuilder[MethodScopeASTBuilder]):
+    def __init__(self, context: BuildContext, resolver: ASTResolver, name: str) -> None:
+        super().__init__(context, resolver, name)
+        self.pos_arg("self")
+
     def _create_scope_builder(self) -> MethodScopeASTBuilder:
         return MethodScopeASTBuilder(self._context, self._resolver)
 
@@ -1083,54 +1087,3 @@ def render(node: t.Union[ast.AST, ASTBuilder]) -> str:
         t.assert_never(node)
 
     return ast.unparse(clean_node)
-
-
-def main1() -> None:
-    with package("simple") as pkg:
-        with pkg.module("foo") as foo:
-            with foo.class_def("Foo") as foo_class:
-                with (
-                    foo_class.method_def("do_stuff")
-                    .pos_arg("spam", str)
-                    .returns(foo.type_ref(str).context_manager())
-                    .abstract()
-                    .not_implemented()
-                ):
-                    pass
-
-            print(foo.info)
-            print(render(foo))
-
-        with pkg.module("bar") as bar:
-            with bar.class_def("Bar").inherits(foo_class) as _:
-                with _.method_def("do_stuff").pos_arg("spam", str).returns(str).context_manager().override().stub():
-                    pass
-
-            print(bar.info)
-            print(render(bar))
-
-
-def main() -> None:
-    with module("simple") as _:
-        with _.class_def("Foo") as foo:
-            with _.dataclass_def("Bar") as bar:
-                _.field_def("spam", int)
-
-            _.field_def("bars", bar.ref().list().optional())
-
-            with foo.init_self_attrs_def({"my_bar": bar}):
-                pass
-
-            with foo.method_def("do_stuff").pos_arg("x", int).returns(str):
-                _.assign_stmt("y", _.call(str, [_.attr("x")]))
-                _.assign_stmt(_.attr("self", "__some"), bar.ref().init().kwarg("x", _.attr("x")))
-                _.return_stmt(_.attr("y").attr("__str__").call())
-
-            with foo.method_def("do_buzz").abstract().returns(object).stub():
-                pass
-
-        print(ast.unparse(_.build()))
-
-
-if __name__ == "__main__":
-    main()

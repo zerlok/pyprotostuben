@@ -35,16 +35,16 @@ def build_simple_module() -> ModuleASTBuilder:
 
         bars: typing.Optional[builtins.list[Foo.Bar]]
 
-        def __init__(my_bar: Foo.Bar) -> None:
+        def __init__(self, my_bar: Foo.Bar) -> None:
             self.__my_bar = my_bar
 
-        def do_stuff(x: builtins.int) -> builtins.str:
+        def do_stuff(self, x: builtins.int) -> builtins.str:
             self.__some = Foo.Bar(x=x)
             x_str = builtins.str(x)
             return y.__str__()
 
         @abc.abstractmethod
-        def do_buzz() -> builtins.object:
+        def do_buzz(self) -> builtins.object:
             raise NotImplementedError
     """
 
@@ -80,7 +80,7 @@ def build_bar_impl_module() -> ModuleASTBuilder:
     class Bar(simple.foo.Foo):
         @typing.override
         @contextlib.contextmanager
-        def do_stuff(spam: builtins.str) -> typing.Iterator[builtins.str]:
+        def do_stuff(self, spam: builtins.str) -> typing.Iterator[builtins.str]:
             ...
     """
 
