@@ -1,11 +1,12 @@
 import abc
 import ast
 import typing as t
-from collections import deque
+from collections import defaultdict, deque
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import cache, cached_property
 from itertools import chain
+from types import TracebackType
 
 from pyprotostuben.python.info import ModuleInfo, PackageInfo, TypeInfo
 
@@ -30,14 +31,14 @@ class StatementASTBuilder(ASTBuilder, metaclass=abc.ABCMeta):
         raise NotImplementedError
 
 
-class Referencable(metaclass=abc.ABCMeta):
-    @abc.abstractmethod
-    def ref(self) -> ExpressionASTBuilder:
-        raise NotImplementedError
-
-
 Expr = t.Union[ast.expr, ExpressionASTBuilder]
 Stmt = t.Union[ast.stmt, StatementASTBuilder, Expr]
+
+
+class Referencable(metaclass=abc.ABCMeta):
+    @abc.abstractmethod
+    def ref(self) -> Expr:
+        raise NotImplementedError
 
 
 TypeRef = t.Union[Expr, type[object], TypeInfo, Referencable]
@@ -235,7 +236,7 @@ class Scope:
 @dataclass()
 class BuildContext:
     packages: t.MutableSequence[PackageInfo]
-    dependencies: t.MutableSet[ModuleInfo]
+    dependencies: t.MutableMapping[ModuleInfo, t.MutableSet[ModuleInfo]]
     scopes: t.MutableSequence[Scope]
     _module: t.Optional[ModuleInfo] = None
 
@@ -264,7 +265,6 @@ class BuildContext:
         assert len(self.scopes) == 1
         scope = self.leave_scope()
         self._module = None
-        self.dependencies.clear()
         return scope
 
     def enter_scope(self, name: t.Optional[str], body: t.MutableSequence[ast.stmt]) -> Scope:
@@ -279,6 +279,10 @@ class BuildContext:
     @property
     def namespace(self) -> t.Sequence[str]:
         return tuple(scope.name for scope in self.scopes if scope.name is not None)
+
+    @property
+    def current_dependencies(self) -> t.MutableSet[ModuleInfo]:
+        return self.dependencies[self.module]
 
     @property
     def current_scope(self) -> Scope:
@@ -314,7 +318,7 @@ class ASTResolver:
             ref = TypeInfo.from_type(ref)
 
         if ref.module is not None and ref.module != self.__context.module:
-            self.__context.dependencies.add(ref.module)
+            self.__context.current_dependencies.add(ref.module)
 
         else:
             ref = TypeInfo(None, ref.ns)
@@ -327,7 +331,12 @@ class ASTResolver:
 
         return expr
 
-    def stmts(self, *stmts: Stmt, docs: t.Optional[t.Sequence[str]] = None) -> list[ast.stmt]:
+    def stmts(
+        self,
+        *stmts: Stmt,
+        docs: t.Optional[t.Sequence[str]] = None,
+        pass_if_empty: bool = False,
+    ) -> list[ast.stmt]:
         body = [
             stmt
             if isinstance(stmt, ast.stmt)
@@ -340,7 +349,7 @@ class ASTResolver:
         if docs:
             body.insert(0, ast.Expr(value=ast.Constant(value="\n".join(docs))))
 
-        if not body:
+        if not body and pass_if_empty:
             body.append(ast.Pass())
 
         return body
@@ -462,6 +471,11 @@ class CallASTBuilder(ExpressionASTBuilder):
         self.__func = func
         self.__args = list[Expr]()
         self.__kwargs = dict[str, Expr]()
+        self.__is_awaited = False
+
+    def await_(self, is_awaited: bool = True) -> t.Self:
+        self.__is_awaited = is_awaited
+        return self
 
     def arg(self, expr: Expr) -> t.Self:
         self.__args.append(self.__resolver.expr(expr))
@@ -472,12 +486,17 @@ class CallASTBuilder(ExpressionASTBuilder):
         return self
 
     def build(self) -> ast.expr:
-        return ast.Call(
+        node: ast.expr = ast.Call(
             func=self.__resolver.expr(self.__func),
             args=[self.__resolver.expr(arg) for arg in self.__args],
             keywords=[ast.keyword(arg=key, value=self.__resolver.expr(kwarg)) for key, kwarg in self.__kwargs.items()],
             lineno=0,
         )
+
+        if self.__is_awaited:
+            node = ast.Await(value=node)
+
+        return node
 
 
 class BaseASTBuilder:
@@ -544,16 +563,16 @@ class BaseASTBuilder:
         return self._resolver.stmts(stmt)
 
 
-class ScopeASTBuilder(BaseASTBuilder):
+class BaseScopeASTBuilder(BaseASTBuilder):
     def __init__(self, context: BuildContext, resolver: ASTResolver) -> None:
         super().__init__(resolver)
-        self.__context = context
+        self._context = context
         self.__docs = list[str]()
 
-    def class_def(self, name: str) -> "ClassHeadASTBuilder":
-        return ClassHeadASTBuilder(self.__context, self._resolver, name)
+    def class_def(self, name: str) -> "ClassSignatureASTBuilder":
+        return ClassSignatureASTBuilder(self._context, self._resolver, name)
 
-    def dataclass_def(self, name: str, frozen: bool = False, kw_only: bool = False) -> "ClassHeadASTBuilder":
+    def dataclass_def(self, name: str, frozen: bool = False, kw_only: bool = False) -> "ClassSignatureASTBuilder":
         return self.class_def(name).decorators(
             self.call(
                 func=get_predefs().dataclass_decorator_ref,
@@ -564,8 +583,8 @@ class ScopeASTBuilder(BaseASTBuilder):
             )
         )
 
-    def func_def(self, name: str) -> "FuncHeadASTBuilder":
-        return FuncHeadASTBuilder(self.__context, self._resolver, name)
+    def func_def(self, name: str) -> "FuncSignatureASTBuilder":
+        return FuncSignatureASTBuilder(self._context, self._resolver, name)
 
     def field_def(self, name: str, annotation: TypeRef) -> ast.stmt:
         node = ast.AnnAssign(
@@ -574,7 +593,7 @@ class ScopeASTBuilder(BaseASTBuilder):
             value=None,
             simple=1,
         )
-        self.__context.append_body(node)
+        self._context.append_body(node)
 
         return node
 
@@ -588,7 +607,7 @@ class ScopeASTBuilder(BaseASTBuilder):
             type_comment=None,
             lineno=0,
         )
-        self.__context.append_body(node)
+        self._context.append_body(node)
 
         return node
 
@@ -597,7 +616,7 @@ class ScopeASTBuilder(BaseASTBuilder):
             value=self._expr(value),
             lineno=0,
         )
-        self.__context.append_body(node)
+        self._context.append_body(node)
 
         return node
 
@@ -608,33 +627,97 @@ class ScopeASTBuilder(BaseASTBuilder):
                 lineno=0,
             ),
         )
-        self.__context.append_body(node)
+        self._context.append_body(node)
 
         return node
 
 
-class ClassHeadASTBuilder(StatementASTBuilder):
+T_co = t.TypeVar("T_co", covariant=True)
+
+
+class NestedASTBuilder(t.Generic[T_co], StatementASTBuilder, metaclass=abc.ABCMeta):
     def __init__(self, context: BuildContext, resolver: ASTResolver, name: str) -> None:
-        self.__context = context
-        self.__resolver = resolver
-        self.__name = name
+        self._context = context
+        self._resolver = resolver
+        self._name = name
+
+    def __enter__(self) -> T_co:
+        self._context.enter_scope(self._name, [])
+        return self._create_scope_builder()
+
+    def __exit__(
+        self,
+        exc_type: t.Optional[type[BaseException]],
+        exc_value: t.Optional[BaseException],
+        exc_traceback: t.Optional[TracebackType],
+    ) -> None:
+        if exc_type is not None:
+            return
+
+        stmts = self._resolver.stmts(self)
+
+        self._context.leave_scope()
+        self._context.extend_body(stmts)
+
+    @t.override
+    @abc.abstractmethod
+    def build(self) -> ast.stmt:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def _create_scope_builder(self) -> T_co:
+        raise NotImplementedError
+
+
+class ClassScopeASTBuilder(BaseScopeASTBuilder, Referencable):
+    def __init__(self, context: BuildContext, resolver: ASTResolver) -> None:
+        super().__init__(context, resolver)
+        self.__info = TypeInfo(context.module, context.namespace)
+
+    @t.override
+    def ref(self) -> TypeRefBuilder:
+        return TypeRefBuilder(self._resolver, self.__info)
+
+    def method_def(self, name: str) -> "MethodSignatureASTBuilder":
+        return MethodSignatureASTBuilder(self._context, self._resolver, name)
+
+    def init_def(self) -> "MethodSignatureASTBuilder":
+        return self.method_def("__init__").returns(self.const(None))
+
+    @contextmanager
+    def init_self_attrs_def(self, attrs: t.Mapping[str, TypeRef]) -> t.Iterator[BaseScopeASTBuilder]:
+        init = self.init_def()
+
+        for name, value in attrs.items():
+            init.pos_arg(name=name, annotation=value)
+
+        with init as init_body:
+            for name, value in attrs.items():
+                init_body.assign_stmt(init_body.attr("self", f"__{name}"), value=init_body.attr(name))
+
+            yield init_body
+
+    def self_attr(self, head: str, *tail: str) -> AttrASTBuilder:
+        return self.attr("self", f"__{head}", *tail)
+
+    def property_getter_def(self, name: str) -> "FuncSignatureASTBuilder":
+        return self.func_def(name).pos_arg("self").decorators(get_predefs().property_ref)
+
+    def property_setter_def(self, name: str) -> "FuncSignatureASTBuilder":
+        return self.func_def(name).pos_arg("self").decorators(self.attr(name, "setter"))
+
+
+class ClassSignatureASTBuilder(NestedASTBuilder[ClassScopeASTBuilder]):
+    def __init__(self, context: BuildContext, resolver: ASTResolver, name: str) -> None:
+        super().__init__(context, resolver, name)
         self.__bases = list[TypeRef]()
         self.__decorators = list[TypeRef]()
         self.__keywords = dict[str, TypeRef]()
         self.__docs = list[str]()
 
-    def __enter__(self) -> "ClassScopeASTBuilder":
-        self.__context.enter_scope(self.__name, [])
-        return ClassScopeASTBuilder(self.__context, self.__resolver)
-
-    def __exit__(self, *_: object) -> None:
-        stmts = self.__resolver.stmts(self)
-
-        self.__context.leave_scope()
-        self.__context.extend_body(stmts)
-
-    def docstring(self, value: str) -> t.Self:
-        self.__docs.append(value)
+    def docstring(self, value: t.Optional[str]) -> t.Self:
+        if value:
+            self.__docs.append(value)
         return self
 
     def abstract(self) -> t.Self:
@@ -642,7 +725,7 @@ class ClassHeadASTBuilder(StatementASTBuilder):
 
     def dataclass(self, frozen: bool = False, kw_only: bool = False) -> t.Self:
         return self.decorators(
-            CallASTBuilder(self.__resolver, get_predefs().dataclass_decorator_ref)
+            CallASTBuilder(self._resolver, get_predefs().dataclass_decorator_ref)
             .kwarg(
                 "frozen",
                 ast.Constant(value=frozen),
@@ -668,68 +751,29 @@ class ClassHeadASTBuilder(StatementASTBuilder):
     @t.override
     def build(self) -> ast.stmt:
         return ast.ClassDef(
-            name=self.__name,
-            bases=[self.__resolver.expr(base) for base in self.__bases],
-            keywords=[
-                ast.keyword(arg=key, value=self.__resolver.expr(value)) for key, value in self.__keywords.items()
-            ],
-            body=self.__resolver.stmts(*self.__context.current_body, docs=self.__docs),
+            name=self._name,
+            bases=[self._resolver.expr(base) for base in self.__bases],
+            keywords=[ast.keyword(arg=key, value=self._resolver.expr(value)) for key, value in self.__keywords.items()],
+            body=self._resolver.stmts(*self._context.current_body, docs=self.__docs, pass_if_empty=True),
             decorator_list=self.__build_decorators(),
             type_params=[],
         )
 
+    def _create_scope_builder(self) -> ClassScopeASTBuilder:
+        return ClassScopeASTBuilder(self._context, self._resolver)
+
     def __build_decorators(self) -> list[ast.expr]:
-        return [self.__resolver.expr(dec) for dec in self.__decorators]
+        return [self._resolver.expr(dec) for dec in self.__decorators]
 
 
-class ClassScopeASTBuilder(ScopeASTBuilder, Referencable):
-    def __init__(self, context: BuildContext, resolver: ASTResolver) -> None:
-        super().__init__(context, resolver)
-        self.__info = TypeInfo(context.module, context.namespace)
-
-    @t.override
-    def ref(self) -> TypeRefBuilder:
-        return TypeRefBuilder(self._resolver, self.__info)
-
-    def method_def(self, name: str) -> "FuncHeadASTBuilder":
-        return self.func_def(name).pos_arg("self")
-
-    def init_def(self) -> "FuncHeadASTBuilder":
-        return self.method_def("__init__").returns(self.const(None))
-
-    @contextmanager
-    def init_self_attrs_def(self, attrs: t.Mapping[str, TypeRef]) -> t.Iterator[ScopeASTBuilder]:
-        init = self.init_def()
-
-        for name, value in attrs.items():
-            init.pos_arg(name=name, annotation=value)
-
-        with init as init_body:
-            for name, value in attrs.items():
-                init_body.assign_stmt(init_body.attr("self", f"__{name}"), value=init_body.attr(name))
-
-            yield init_body
-
-    def self_attr(self, head: str, *tail: str) -> AttrASTBuilder:
-        return self.attr("self", f"__{head}", *tail)
-
-    def property_getter_def(self, name: str) -> "FuncHeadASTBuilder":
-        return self.func_def(name).pos_arg("self").decorators(get_predefs().property_ref)
-
-    def property_setter_def(self, name: str) -> "FuncHeadASTBuilder":
-        return self.func_def(name).pos_arg("self").decorators(self.attr(name, "setter"))
-
-
-class FuncHeadASTBuilder(StatementASTBuilder):
+class _BaseFuncSignatureASTBuilder(NestedASTBuilder[T_co]):
     def __init__(
         self,
         context: BuildContext,
         resolver: ASTResolver,
         name: str,
     ) -> None:
-        self.__context = context
-        self.__resolver = resolver
-        self.__name = name
+        super().__init__(context, resolver, name)
         self.__decorators = list[TypeRef]()
         self.__args = list[tuple[str, t.Optional[TypeRef]]]()
         self.__kwargs = dict[str, TypeRef]()
@@ -743,18 +787,8 @@ class FuncHeadASTBuilder(StatementASTBuilder):
         self.__is_not_implemented = False
         self.__docs = list[str]()
 
-    def __enter__(self) -> ScopeASTBuilder:
-        self.__context.enter_scope(self.__name, [])
-        return ScopeASTBuilder(self.__context, self.__resolver)
-
-    def __exit__(self, *_: object) -> None:
-        stmts = self.__resolver.stmts(self)
-
-        self.__context.leave_scope()
-        self.__context.extend_body(stmts)
-
-    def async_(self) -> t.Self:
-        self.__is_async = True
+    def async_(self, is_async: bool = True) -> t.Self:
+        self.__is_async = is_async
         return self
 
     def abstract(self) -> t.Self:
@@ -765,8 +799,9 @@ class FuncHeadASTBuilder(StatementASTBuilder):
         self.__is_override = True
         return self
 
-    def docstring(self, value: str) -> t.Self:
-        self.__docs.append(value)
+    def docstring(self, value: t.Optional[str]) -> t.Self:
+        if value:
+            self.__docs.append(value)
         return self
 
     def decorators(self, *items: t.Optional[TypeRef]) -> t.Self:
@@ -802,11 +837,12 @@ class FuncHeadASTBuilder(StatementASTBuilder):
         self.__is_not_implemented = True
         return self
 
+    @t.override
     def build(self) -> ast.stmt:
         if self.__is_async:
             return ast.AsyncFunctionDef(  # type: ignore[call-overload,no-any-return,unused-ignore]
                 # type_comment and type_params has default value each in 3.12 and not available in 3.9
-                name=self.__name,
+                name=self._name,
                 args=self.__build_args(),
                 decorator_list=self.__build_decorators(),
                 returns=self.__build_returns(),
@@ -816,13 +852,18 @@ class FuncHeadASTBuilder(StatementASTBuilder):
 
         return ast.FunctionDef(  # type: ignore[call-overload,no-any-return,unused-ignore]
             # type_comment and type_params has default value each in 3.12 and not available in 3.9
-            name=self.__name,
+            name=self._name,
             decorator_list=self.__build_decorators(),
             args=self.__build_args(),
             body=self.__build_body(),
             returns=self.__build_returns(),
             lineno=0,
         )
+
+    @t.override
+    @abc.abstractmethod
+    def _create_scope_builder(self) -> T_co:
+        raise NotImplementedError
 
     def __build_decorators(self) -> list[ast.expr]:
         head_decorators: list[TypeRef] = []
@@ -841,7 +882,7 @@ class FuncHeadASTBuilder(StatementASTBuilder):
                 else get_predefs().context_manager_decorator
             )
 
-        return [self.__resolver.expr(dec) for dec in chain(head_decorators, self.__decorators, last_decorators)]
+        return [self._resolver.expr(dec) for dec in chain(head_decorators, self.__decorators, last_decorators)]
 
     def __build_args(self) -> ast.arguments:
         return ast.arguments(
@@ -849,28 +890,28 @@ class FuncHeadASTBuilder(StatementASTBuilder):
             args=[
                 ast.arg(
                     arg=arg,
-                    annotation=self.__resolver.expr(annotation) if annotation is not None else None,
+                    annotation=self._resolver.expr(annotation) if annotation is not None else None,
                 )
                 for arg, annotation in self.__args
             ],
-            defaults=[self.__resolver.expr(self.__defaults[arg]) for arg, _ in self.__args if arg in self.__defaults],
+            defaults=[self._resolver.expr(self.__defaults[arg]) for arg, _ in self.__args if arg in self.__defaults],
             kwonlyargs=[
                 ast.arg(
                     arg=arg,
-                    annotation=self.__resolver.expr(annotation) if annotation is not None else None,
+                    annotation=self._resolver.expr(annotation) if annotation is not None else None,
                 )
                 for arg, annotation in self.__kwargs.items()
             ],
-            kw_defaults=[self.__resolver.expr(self.__defaults[arg]) for arg in self.__kwargs if arg in self.__defaults],
+            kw_defaults=[self._resolver.expr(self.__defaults[arg]) for arg in self.__kwargs if arg in self.__defaults],
         )
 
     def __build_returns(self) -> t.Optional[ast.expr]:
         if self.__returns is None:
             return None
 
-        ret = self.__resolver.expr(self.__returns)
+        ret = self._resolver.expr(self.__returns)
         if self.__iterator_cm:
-            ret = BaseASTBuilder(self.__resolver).iterator_type(ret, is_async=self.__is_async)
+            ret = BaseASTBuilder(self._resolver).iterator_type(ret, is_async=self.__is_async)
 
         return ret
 
@@ -884,12 +925,31 @@ class FuncHeadASTBuilder(StatementASTBuilder):
             body = [ast.Raise(exc=ast.Name(id="NotImplementedError"))]
 
         else:
-            body = self.__context.current_body
+            body = self._context.current_body
 
-        return self.__resolver.stmts(*body, docs=self.__docs)
+        return self._resolver.stmts(*body, docs=self.__docs, pass_if_empty=True)
 
 
-class ModuleASTBuilder(ScopeASTBuilder, ASTBuilder):
+class FuncScopeASTBuilder(BaseScopeASTBuilder):
+    pass
+
+
+class FuncSignatureASTBuilder(_BaseFuncSignatureASTBuilder[FuncScopeASTBuilder]):
+    def _create_scope_builder(self) -> FuncScopeASTBuilder:
+        return FuncScopeASTBuilder(self._context, self._resolver)
+
+
+class MethodScopeASTBuilder(FuncScopeASTBuilder):
+    def self_attr(self, head: str, *tail: str) -> AttrASTBuilder:
+        return self.attr("self", f"__{head}", *tail)
+
+
+class MethodSignatureASTBuilder(_BaseFuncSignatureASTBuilder[MethodScopeASTBuilder]):
+    def _create_scope_builder(self) -> MethodScopeASTBuilder:
+        return MethodScopeASTBuilder(self._context, self._resolver)
+
+
+class ModuleASTBuilder(BaseScopeASTBuilder, ASTBuilder):
     def __init__(self, context: BuildContext, resolver: ASTResolver, info: ModuleInfo, body: list[ast.stmt]) -> None:
         super().__init__(context, resolver)
         self.__context = context
@@ -902,7 +962,15 @@ class ModuleASTBuilder(ScopeASTBuilder, ASTBuilder):
         self.__context.enter_module(self.__info, self.__body)
         return self
 
-    def __exit__(self, *_: object) -> None:
+    def __exit__(
+        self,
+        exc_type: t.Optional[type[BaseException]],
+        exc_value: t.Optional[BaseException],
+        exc_traceback: t.Optional[TracebackType],
+    ) -> None:
+        if exc_type is not None:
+            return
+
         scope = self.__context.leave_module()
         assert scope.body is self.__body
 
@@ -910,8 +978,9 @@ class ModuleASTBuilder(ScopeASTBuilder, ASTBuilder):
     def info(self) -> ModuleInfo:
         return self.__info
 
-    def docstring(self, value: str) -> t.Self:
-        self.__docs.append(value)
+    def docstring(self, value: t.Optional[str]) -> t.Self:
+        if value:
+            self.__docs.append(value)
         return self
 
     def import_stmt(self, info: ModuleInfo) -> ast.Import:
@@ -920,12 +989,15 @@ class ModuleASTBuilder(ScopeASTBuilder, ASTBuilder):
     @t.override
     def build(self) -> ast.AST:
         return ast.Module(
-            body=[
-                *(self.import_stmt(dep) for dep in sorted(self.__context.dependencies, key=self.__get_dep_sort_key)),
-                *self.__resolver.stmts(*self.__body, docs=self.__docs),
-            ],
+            body=self.__resolver.stmts(*self.__build_imports(), *self.__body, docs=self.__docs),
             type_ignores=[],
         )
+
+    def __build_imports(self) -> t.Sequence[ast.stmt]:
+        return [
+            self.import_stmt(dep)
+            for dep in sorted(self.__context.dependencies[self.__info], key=self.__get_dep_sort_key)
+        ]
 
     def __get_dep_sort_key(self, info: ModuleInfo) -> str:
         return info.qualname
@@ -948,7 +1020,15 @@ class PackageASTBuilder:
         self.__context.enter_package(self.__info)
         return self
 
-    def __exit__(self, *_: object) -> None:
+    def __exit__(
+        self,
+        exc_type: t.Optional[type[BaseException]],
+        exc_value: t.Optional[BaseException],
+        exc_traceback: t.Optional[TracebackType],
+    ) -> None:
+        if exc_type is not None:
+            return
+
         self.__context.leave_package()
 
     @property
@@ -966,7 +1046,7 @@ class PackageASTBuilder:
 
         builder = self.__modules.get(info)
         if builder is None:
-            builder = ModuleASTBuilder(self.__context, self.__resolver, info, [])
+            builder = self.__modules[info] = ModuleASTBuilder(self.__context, self.__resolver, info, [])
 
         return builder
 
@@ -980,14 +1060,14 @@ class PackageASTBuilder:
 
 def package(info: t.Union[str, PackageInfo], parent: t.Optional[PackageInfo] = None) -> PackageASTBuilder:
     pkg_info = info if isinstance(info, PackageInfo) else PackageInfo(parent, info)
-    context = BuildContext([pkg_info], set(), deque())
+    context = BuildContext([], defaultdict(set), deque())
     resolver = ASTResolver(context)
     return PackageASTBuilder(context, resolver, pkg_info, {})
 
 
 def module(info: t.Union[str, ModuleInfo], parent: t.Optional[PackageInfo] = None) -> ModuleASTBuilder:
     mod_info = info if isinstance(info, ModuleInfo) else ModuleInfo(parent, info)
-    context = BuildContext([], set(), deque())
+    context = BuildContext([], defaultdict(set), deque())
     resolver = ASTResolver(context)
     return ModuleASTBuilder(context, resolver, mod_info, [])
 
