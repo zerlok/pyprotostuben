@@ -720,11 +720,11 @@ class ScopeASTBuilder(BaseASTBuilder):
     def func_def(self, name: str) -> "FuncSignatureASTBuilder":
         return FuncSignatureASTBuilder(self._context, self._resolver, name)
 
-    def field_def(self, name: str, annotation: TypeRef) -> ast.stmt:
+    def field_def(self, name: str, annotation: TypeRef, default: t.Optional[Expr] = None) -> ast.stmt:
         node = ast.AnnAssign(
             target=ast.Name(id=name),
             annotation=self._expr(annotation),
-            value=None,
+            value=self._expr(default) if default is not None else None,
             simple=1,
         )
         self._context.append_body(node)

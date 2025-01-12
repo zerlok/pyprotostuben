@@ -99,10 +99,19 @@ class DefaultTypeWalkerTrait(TypeWalkerTrait):
             )
 
         if (origin := t.get_origin(obj)) is not None and origin not in {t.Literal, t.Generic}:
+            inners = t.get_args(obj)
+
+            if (
+                getattr(obj, "__module__", None) == t.Optional.__module__
+                and getattr(obj, "__name__", None) == t.Optional.__name__
+            ):
+                origin = t.Optional
+                inners = inners[:1]
+
             return ContainerContext(
                 type_=t.cast(type[object], obj),
                 origin=origin,
-                inners=t.get_args(obj),
+                inners=inners,
             )
 
         return None

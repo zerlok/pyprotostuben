@@ -62,11 +62,8 @@ T = t.TypeVar("T")
                 call.enter_container(
                     ContainerContext(
                         type_=t.cast(type[object], t.Optional[list[list[str]]]),
-                        origin=t.cast(type[object], t.Union),
-                        inners=(
-                            list[list[str]],
-                            type(None),
-                        ),
+                        origin=t.cast(type[object], t.Optional),
+                        inners=(list[list[str]],),
                     ),
                     ANY,
                 ),
@@ -76,16 +73,11 @@ T = t.TypeVar("T")
                 call.leave_scalar(ScalarContext(type_=str), ANY),
                 call.leave_container(ContainerContext(type_=list[str], origin=list, inners=(str,)), ANY),
                 call.leave_container(ContainerContext(type_=list[list[str]], origin=list, inners=(list[str],)), ANY),
-                call.enter_scalar(ScalarContext(type_=type(None)), ANY),
-                call.leave_scalar(ScalarContext(type_=type(None)), ANY),
                 call.leave_container(
                     ContainerContext(
                         type_=t.cast(type[object], t.Optional[list[list[str]]]),
-                        origin=t.cast(type[object], t.Union),
-                        inners=(
-                            list[list[str]],
-                            type(None),
-                        ),
+                        origin=t.cast(type[object], t.Optional),
+                        inners=(list[list[str]],),
                     ),
                     ANY,
                 ),
