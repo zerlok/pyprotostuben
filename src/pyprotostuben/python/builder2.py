@@ -488,6 +488,24 @@ class CallASTBuilder(ExpressionASTBuilder):
         self.__kwargs[name] = expr
         return self
 
+    def call(
+        self,
+        args: t.Optional[t.Sequence[Expr]] = None,
+        kwargs: t.Optional[t.Mapping[str, Expr]] = None,
+    ) -> "CallASTBuilder":
+        builder = CallASTBuilder(
+            resolver=self.__resolver,
+            func=self,
+        )
+
+        for arg in args or ():
+            builder.arg(arg)
+
+        for name, kwarg in (kwargs or {}).items():
+            builder.kwarg(name, kwarg)
+
+        return builder
+
     def build(self) -> ast.expr:
         node: ast.expr = ast.Call(
             func=self.__resolver.expr(self.__func),
@@ -605,7 +623,7 @@ class BaseASTBuilder:
             )
 
         return ast.Dict(
-            keys=[self._expr(key) for key in items.keys()],
+            keys=[self._expr(key) for key in items],
             values=[self._expr(value) for value in items.values()],
         )
 
@@ -789,11 +807,11 @@ class ClassScopeASTBuilder(ScopeASTBuilder, TypeInfoProvider):
     def init_self_attrs_def(self, attrs: t.Mapping[str, TypeRef]) -> t.Iterator["MethodScopeASTBuilder"]:
         init_def = self.init_def()
 
-        for name, value in attrs.items():
-            init_def.pos_arg(name=name, annotation=value)
+        for name, annotation in attrs.items():
+            init_def.pos_arg(name=name, annotation=annotation)
 
         with init_def as init_body:
-            for name, value in attrs.items():
+            for name in attrs:
                 init_body.assign_stmt(init_body.self_attr(name), init_body.attr(name))
 
             yield init_body
@@ -932,8 +950,9 @@ class _BaseFuncSignatureASTBuilder(NestingASTBuilder[T_co]):
 
         return self
 
-    def returns(self, ret: TypeRef) -> t.Self:
-        self.__returns = ret
+    def returns(self, ret: t.Optional[TypeRef]) -> t.Self:
+        if ret is not None:
+            self.__returns = ret
         return self
 
     def context_manager(self) -> t.Self:

@@ -51,23 +51,25 @@ def build_simple_module() -> ModuleASTBuilder:
             raise NotImplementedError
     """
 
-    with module("simple") as mod:
-        with mod.class_def("Foo") as foo:
-            with mod.class_def("Bar").dataclass() as bar:
-                mod.field_def("spam", int)
+    with (
+        module("simple") as mod,
+        mod.class_def("Foo") as foo,
+    ):
+        with mod.class_def("Bar").dataclass() as bar:
+            mod.field_def("spam", int)
 
-            mod.field_def("bars", bar.ref().list().optional())
+        mod.field_def("bars", bar.ref().list().optional())
 
-            with foo.init_self_attrs_def({"my_bar": bar}):
-                pass
+        with foo.init_self_attrs_def({"my_bar": bar}):
+            pass
 
-            with foo.method_def("do_stuff").pos_arg("x", int).returns(str):
-                mod.assign_stmt(mod.attr("self", "__some"), bar.ref().init().kwarg("x", mod.attr("x")))
-                mod.assign_stmt("x_str", mod.call(str, [mod.attr("x")]))
-                mod.return_stmt(mod.attr("y").attr("__str__").call())
+        with foo.method_def("do_stuff").pos_arg("x", int).returns(str):
+            mod.assign_stmt(mod.attr("self", "__some"), bar.ref().init().kwarg("x", mod.attr("x")))
+            mod.assign_stmt("x_str", mod.call(str, [mod.attr("x")]))
+            mod.return_stmt(mod.attr("y").attr("__str__").call())
 
-            with foo.method_def("do_buzz").abstract().returns(object).not_implemented():
-                pass
+        with foo.method_def("do_buzz").abstract().returns(object).not_implemented():
+            pass
 
         return mod
 
@@ -87,24 +89,24 @@ def build_bar_impl_module() -> ModuleASTBuilder:
             ...
     """
 
-    with package("simple") as pkg:
-        with pkg.module("foo") as foo:
-            with foo.class_def("Foo") as foo_class:
-                with (
-                    foo_class.method_def("do_stuff")
-                    .pos_arg("spam", str)
-                    .returns(foo.type_(str).context_manager())
-                    .abstract()
-                    .not_implemented()
-                ):
-                    pass
+    with (
+        package("simple") as pkg,
+        pkg.module("foo") as foo,
+        foo.class_def("Foo") as foo_class,
+        foo_class.method_def("do_stuff")
+        .pos_arg("spam", str)
+        .returns(foo.type_(str).context_manager())
+        .abstract()
+        .not_implemented(),
+    ):
+        pass
 
-        with pkg.module("bar") as bar:
-            with bar.class_def("Bar").inherits(foo_class) as _:
-                with _.method_def("do_stuff").pos_arg("spam", str).returns(str).context_manager().override().stub():
-                    pass
-
-            return bar
+    with (
+        pkg.module("bar") as bar,
+        bar.class_def("Bar").inherits(foo_class) as _,
+        _.method_def("do_stuff").pos_arg("spam", str).returns(str).context_manager().override().stub(),
+    ):
+        return bar
 
 
 @pytest.mark.parametrize(

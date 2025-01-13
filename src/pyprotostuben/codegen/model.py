@@ -10,6 +10,7 @@ from pyprotostuben.python.builder2 import (
     ClassSignatureASTBuilder,
     Expr,
     ModuleASTBuilder,
+    ScopeASTBuilder,
     TypeRef,
 )
 from pyprotostuben.python.info import ModuleInfo, TypeInfo
@@ -75,10 +76,10 @@ class ModelDefBuilder:
 
     def assign_expr(
         self,
-        source: ast.expr,
+        source: AttrASTBuilder,
         type_: type[object],
         mode: t.Literal["original", "model"],
-        builder: ModuleASTBuilder,
+        builder: ScopeASTBuilder,
     ) -> ast.expr:
         context = InitExprContext(deque([InitExprContext.Item(source, [])]))
 
@@ -237,7 +238,7 @@ class InitExprContext:
 
 
 class AssignExprGenerator(TypeVisitorDecorator[InitExprContext]):
-    def __init__(self, builder: ModuleASTBuilder, resolver: t.Callable[[type[object]], TypeRef]) -> None:
+    def __init__(self, builder: ScopeASTBuilder, resolver: t.Callable[[type[object]], TypeRef]) -> None:
         self.__builder = builder
         self.__resolver = resolver
 
@@ -286,7 +287,7 @@ class AssignExprGenerator(TypeVisitorDecorator[InitExprContext]):
         inner = meta.leave()
         item = inner.exprs[0]
 
-        if str(context.type_).startswith("typing.Optional"):
+        if context.origin is t.Optional:
             expr = self.__builder.ternary_not_none_expr(body=item, test=meta.last.source)
 
         elif issubclass(context.origin, t.Sequence):
