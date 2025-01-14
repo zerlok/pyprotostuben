@@ -269,8 +269,7 @@ class BuildContext:
         return scope
 
     def leave_scope(self) -> Scope:
-        scope = self.scopes.pop()
-        return scope
+        return self.scopes.pop()
 
     @property
     def namespace(self) -> t.Sequence[str]:
@@ -383,7 +382,7 @@ class TypeRefBuilder(ExpressionASTBuilder):
 
         return self
 
-    def context_manager(self, is_async: bool = False) -> "TypeRefBuilder":
+    def context_manager(self, *, is_async: bool = False) -> "TypeRefBuilder":
         inner = self.__wraps
 
         def wrap(info: TypeInfo) -> ast.expr:
@@ -476,7 +475,7 @@ class CallASTBuilder(ExpressionASTBuilder):
         self.__kwargs = dict[str, Expr]()
         self.__is_awaited = False
 
-    def await_(self, is_awaited: bool = True) -> t.Self:
+    def await_(self, *, is_awaited: bool = True) -> t.Self:
         self.__is_awaited = is_awaited
         return self
 
@@ -687,7 +686,7 @@ class BaseASTBuilder:
         return self._resolver.stmts(*(stmt for stmt in stmts if stmt is not None))
 
 
-class NestingASTBuilder(t.Generic[T_co], StatementASTBuilder, metaclass=abc.ABCMeta):
+class BaseNestingASTBuilder(t.Generic[T_co], StatementASTBuilder, metaclass=abc.ABCMeta):
     def __init__(self, context: BuildContext, resolver: ASTResolver, name: str) -> None:
         self._context = context
         self._resolver = resolver
@@ -784,18 +783,32 @@ class ScopeASTBuilder(BaseASTBuilder):
         return node
 
 
-class ClassScopeASTBuilder(ScopeASTBuilder, TypeInfoProvider):
-    def __init__(self, context: BuildContext, resolver: ASTResolver, provider: TypeInfoProvider) -> None:
+class ChildScopeASTBuilder(ScopeASTBuilder, StatementASTBuilder):
+    def __init__(self, context: BuildContext, resolver: ASTResolver, parent: StatementASTBuilder) -> None:
         super().__init__(context, resolver)
-        self.__provider = provider
+        self.__parent = parent
+
+    def build(self) -> t.Sequence[ast.stmt]:
+        return self.__parent.build()
+
+
+class ClassScopeASTBuilder(ChildScopeASTBuilder, TypeInfoProvider):
+    def __init__(
+        self,
+        context: BuildContext,
+        resolver: ASTResolver,
+        signature: "ClassSignatureASTBuilder",
+    ) -> None:
+        super().__init__(context, resolver, signature)
+        self.__signature = signature
 
     @t.override
     def provide_type_info(self) -> TypeInfo:
-        return self.__provider.provide_type_info()
+        return self.__signature.provide_type_info()
 
     @t.override
     def ref(self) -> TypeRefBuilder:
-        return self.__provider.ref()
+        return self.__signature.ref()
 
     def method_def(self, name: str) -> "MethodSignatureASTBuilder":
         return MethodSignatureASTBuilder(self._context, self._resolver, name)
@@ -823,7 +836,7 @@ class ClassScopeASTBuilder(ScopeASTBuilder, TypeInfoProvider):
         return self.func_def(name).pos_arg("self").decorators(self.attr(name, "setter"))
 
 
-class ClassSignatureASTBuilder(NestingASTBuilder[ClassScopeASTBuilder], TypeInfoProvider):
+class ClassSignatureASTBuilder(BaseNestingASTBuilder[ClassScopeASTBuilder], TypeInfoProvider):
     def __init__(self, context: BuildContext, resolver: ASTResolver, name: str) -> None:
         super().__init__(context, resolver, name)
         self.__info = TypeInfo.build(self._context.module, *self._context.namespace, self._name)
@@ -848,7 +861,7 @@ class ClassSignatureASTBuilder(NestingASTBuilder[ClassScopeASTBuilder], TypeInfo
     def abstract(self) -> t.Self:
         return self.keywords(metaclass=get_predefs().abc_meta_ref)
 
-    def dataclass(self, frozen: bool = False, kw_only: bool = False) -> t.Self:
+    def dataclass(self, *, frozen: bool = False, kw_only: bool = False) -> t.Self:
         return self.decorators(
             CallASTBuilder(self._resolver, get_predefs().dataclass_decorator_ref)
             .kwarg(
@@ -895,7 +908,7 @@ class ClassSignatureASTBuilder(NestingASTBuilder[ClassScopeASTBuilder], TypeInfo
         return [self._resolver.expr(dec) for dec in self.__decorators]
 
 
-class _BaseFuncSignatureASTBuilder(NestingASTBuilder[T_co]):
+class _BaseFuncSignatureASTBuilder(BaseNestingASTBuilder[T_co]):
     def __init__(
         self,
         context: BuildContext,
@@ -916,7 +929,7 @@ class _BaseFuncSignatureASTBuilder(NestingASTBuilder[T_co]):
         self.__is_not_implemented = False
         self.__docs = list[str]()
 
-    def async_(self, is_async: bool = True) -> t.Self:
+    def async_(self, *, is_async: bool = True) -> t.Self:
         self.__is_async = is_async
         return self
 
@@ -1065,13 +1078,13 @@ class _BaseFuncSignatureASTBuilder(NestingASTBuilder[T_co]):
         return self._resolver.stmts(*body, docs=self.__docs, pass_if_empty=True)
 
 
-class FuncScopeASTBuilder(ScopeASTBuilder):
+class FuncScopeASTBuilder(ChildScopeASTBuilder):
     pass
 
 
 class FuncSignatureASTBuilder(_BaseFuncSignatureASTBuilder[FuncScopeASTBuilder]):
     def _create_scope_builder(self) -> FuncScopeASTBuilder:
-        return FuncScopeASTBuilder(self._context, self._resolver)
+        return FuncScopeASTBuilder(self._context, self._resolver, self)
 
 
 class MethodScopeASTBuilder(FuncScopeASTBuilder):
@@ -1085,7 +1098,7 @@ class MethodSignatureASTBuilder(_BaseFuncSignatureASTBuilder[MethodScopeASTBuild
         self.pos_arg("self")
 
     def _create_scope_builder(self) -> MethodScopeASTBuilder:
-        return MethodScopeASTBuilder(self._context, self._resolver)
+        return MethodScopeASTBuilder(self._context, self._resolver, self)
 
 
 class ModuleASTBuilder(ScopeASTBuilder):
@@ -1105,11 +1118,9 @@ class ModuleASTBuilder(ScopeASTBuilder):
         exc_value: t.Optional[BaseException],
         exc_traceback: t.Optional[TracebackType],
     ) -> None:
-        if exc_type is not None:
-            return
-
-        scope = self._context.leave_module()
-        assert scope.body is self.__body
+        if exc_type is None:
+            scope = self._context.leave_module()
+            assert scope.body is self.__body
 
     @property
     def info(self) -> ModuleInfo:
@@ -1186,7 +1197,7 @@ class PackageASTBuilder:
 
         return builder
 
-    def build(self) -> t.Mapping[ModuleInfo, ast.AST]:
+    def build(self) -> t.Mapping[ModuleInfo, ast.Module]:
         return {
             info: builder.build()
             for info, builder in self.__modules.items()

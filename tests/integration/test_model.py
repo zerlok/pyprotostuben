@@ -1,369 +1,322 @@
 import ast
 import typing as t
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 
 import pytest
 
-from pyprotostuben.codegen.model import DataclassModelFactory, ModelDefBuilder, ModelFactory, PydanticModelFactory
-from pyprotostuben.python.builder import ModuleASTBuilder, TypeRef
-from pyprotostuben.python.info import ModuleInfo, PackageInfo, TypeInfo
-from tests.conftest import parse_ast
-from tests.stub.structs import ChatRoom, User, UserStatus
+from pyprotostuben.codegen.model import DataclassModelFactory, ModelASTBuilder, ModelFactory, PydanticModelFactory
+from pyprotostuben.python.builder2 import Expr, ModuleASTBuilder, package, render
+from pyprotostuben.python.info import PackageInfo
+from tests.conftest import parse_module_ast
+from tests.stub.structs import ChatRoom, User
 
 
 @dataclass(frozen=True, kw_only=True)
-class CreateCase:
-    expected: ast.AST
+class BaseCase:
+    model_factory_type: t.Union[type[DataclassModelFactory], type[PydanticModelFactory]] = PydanticModelFactory
+    model_module_name: str = "model"
+
+
+@dataclass(frozen=True, kw_only=True)
+class CreateCase(BaseCase):
     name: str
-    fields: t.Mapping[str, TypeRef]
+    fields: t.Mapping[str, type[object]]
     defaults: t.Mapping[str, object] = field(default_factory=dict)
-    nested: t.Sequence[ast.stmt] = field(default_factory=list)
     doc: t.Optional[str] = None
+    expected: ast.Module
 
 
 @pytest.mark.parametrize(
-    ("model_factory_type", "case"),
+    "case",
     [
         pytest.param(
-            PydanticModelFactory,
             CreateCase(
-                expected=parse_ast("""
-                import builtins
-                import model
-                import pydantic
-
-                class Foo(pydantic.BaseModel):
-                    spam: builtins.int
-                    eggs: model.EggBucket
-                """),
+                model_factory_type=PydanticModelFactory,
                 name="Foo",
                 fields={
-                    "spam": TypeInfo.from_type(int),
-                    "eggs": TypeInfo.build(ModuleInfo(None, "model"), "EggBucket"),
+                    "spam": int,
+                    "eggs": User,
                 },
+                expected=parse_module_ast("""
+                    import builtins
+                    import datetime
+                    import pydantic
+                    import typing
+
+                    class User(pydantic.BaseModel):
+                        id: builtins.int
+                        username: builtins.str
+                        created_at: datetime.datetime
+                        status: typing.Literal["UNVERIFIED", "VERIFIED", "BANNED"]
+
+                    class Foo(pydantic.BaseModel):
+                        spam: builtins.int
+                        eggs: User
+                """),
             ),
             id="pydantic model factory",
         ),
         pytest.param(
-            DataclassModelFactory,
             CreateCase(
-                expected=parse_ast("""
-                import builtins
-                import dataclasses
-                import model
-
-                @dataclasses.dataclass(frozen=True, kw_only=True)
-                class Foo:
-                    spam: builtins.str
-                    eggs: model.EggBucket
-                """),
+                model_factory_type=DataclassModelFactory,
                 name="Foo",
                 fields={
-                    "spam": TypeInfo.from_type(str),
-                    "eggs": TypeInfo.build(ModuleInfo(None, "model"), "EggBucket"),
+                    "spam": str,
+                    "eggs": User,
                 },
+                expected=parse_module_ast("""
+                    import builtins
+                    import dataclasses
+                    import datetime
+                    import typing
+
+                    @dataclasses.dataclass(frozen=True, kw_only=True)
+                    class User:
+                        id: builtins.int
+                        username: builtins.str
+                        created_at: datetime.datetime
+                        status: typing.Literal['UNVERIFIED', 'VERIFIED', 'BANNED']
+
+                    @dataclasses.dataclass(frozen=True, kw_only=True)
+                    class Foo:
+                        spam: builtins.str
+                        eggs: User
+                """),
             ),
             id="dataclass model factory",
         ),
     ],
 )
-def test_model_def_builder_create_returns_expected_class_def(
+def test_model_ast_builder_create_returns_expected_class_def(
     model_module_builder: ModuleASTBuilder,
+    model_ast_builder: ModelASTBuilder,
     case: CreateCase,
-    model_def_builder: ModelDefBuilder,
 ) -> None:
-    model_module_builder.append(
-        model_def_builder.create(
-            name=case.name,
-            fields=case.fields,
-            defaults=case.defaults,
-            nested=case.nested,
-            doc=case.doc,
-        )
-    )
+    model_ast_builder.update(case.fields.values())
+    model_ast_builder.create_def(name=case.name, fields=case.fields, doc=case.doc)
 
-    assert ast.unparse(model_module_builder.build()) == ast.unparse(case.expected)
+    assert render(model_module_builder) == render(case.expected)
+
+
+@dataclass(frozen=True, kw_only=True)
+class AssignExprCase(BaseCase):
+    source: Expr
+    target: type[object]
+    mode: t.Literal["original", "model"]
+    expected: ast.Module
 
 
 @pytest.mark.parametrize(
-    ("model_factory_type", "model_module_info", "types", "orig_type", "expected_type_info"),
+    "case",
     [
         pytest.param(
-            PydanticModelFactory,
-            ModuleInfo(None, "model"),
-            [str],
-            str,
-            TypeInfo.from_type(str),
-            id="str",
-        ),
-        pytest.param(
-            PydanticModelFactory,
-            ModuleInfo(None, "model"),
-            [User],
-            User,
-            TypeInfo.build(ModuleInfo(None, "model"), "User"),
-            id="user model",
-        ),
-    ],
-)
-def test_model_def_builder_resolve_returns_expected_type_info(
-    types: t.Collection[type[object]],
-    orig_type: type[object],
-    expected_type_info: TypeInfo,
-    model_def_builder: ModelDefBuilder,
-) -> None:
-    model_def_builder.update(types)
-
-    assert model_def_builder.resolve(orig_type) == expected_type_info
-
-
-@pytest.mark.parametrize(
-    ("model_factory_type", "model_module_info", "types", "orig_type", "expected_expr"),
-    [
-        pytest.param(
-            PydanticModelFactory,
-            ModuleInfo(None, "model"),
-            [UserStatus],
-            UserStatus,
-            parse_ast("""typing.Literal["UNVERIFIED", "VERIFIED", "BANNED"]"""),
-            id="user status",
-        ),
-    ],
-)
-def test_model_def_builder_resolve_returns_expected_expr(
-    types: t.Collection[type[object]],
-    orig_type: type[object],
-    expected_expr: ast.expr,
-    model_def_builder: ModelDefBuilder,
-) -> None:
-    model_def_builder.update(types)
-
-    resolved = model_def_builder.resolve(orig_type)
-    assert isinstance(resolved, ast.expr)
-    assert ast.unparse(resolved) == ast.unparse(expected_expr)
-
-
-@pytest.mark.parametrize(
-    ("model_factory_type", "model_module_info", "source", "type_", "mode", "expected"),
-    [
-        pytest.param(
-            PydanticModelFactory,
-            ModuleInfo(None, "model"),
-            ast.Name(id="my_source_var"),
-            str,
-            "model",
-            parse_ast("my_source_var"),
+            AssignExprCase(
+                source=ast.Name(id="my_source_var"),
+                target=str,
+                mode="model",
+                expected=parse_module_ast("my_source_var"),
+            ),
             id="str scalar model",
         ),
         pytest.param(
-            PydanticModelFactory,
-            ModuleInfo(None, "model"),
-            ast.Attribute(value=ast.Attribute(value=ast.Name(id="my"), attr="source"), attr="var"),
-            str,
-            "model",
-            ast.Attribute(value=ast.Attribute(value=ast.Name(id="my"), attr="source"), attr="var"),
+            AssignExprCase(
+                source=ast.Attribute(value=ast.Attribute(value=ast.Name(id="my"), attr="source"), attr="var"),
+                target=str,
+                mode="model",
+                expected=parse_module_ast("my.source.var"),
+            ),
             id="nested attribute",
         ),
         pytest.param(
-            PydanticModelFactory,
-            ModuleInfo(None, "model"),
-            ast.Name(id="my_source_var"),
-            str,
-            "original",
-            parse_ast("my_source_var"),
+            AssignExprCase(
+                source=ast.Name(id="my_source_var"),
+                target=str,
+                mode="original",
+                expected=parse_module_ast("my_source_var"),
+            ),
             id="str scalar original",
         ),
         pytest.param(
-            PydanticModelFactory,
-            ModuleInfo(None, "model"),
-            "user_data",
-            User,
-            "model",
-            parse_ast("""
-            import model
+            AssignExprCase(
+                source=ast.Name(id="user_data"),
+                target=User,
+                mode="model",
+                expected=parse_module_ast("""
+                    import tests.integration.test_model.model
 
-            model.User(
-                id=user_data.id,
-                username=user_data.username,
-                created_at=user_data.created_at,
-                status=user_data.status.name,
-            )
-            """),
+                    tests.integration.test_model.model.User(
+                        id=user_data.id,
+                        username=user_data.username,
+                        created_at=user_data.created_at,
+                        status=user_data.status.name,
+                    )
+                """),
+            ),
             id="user model",
         ),
         pytest.param(
-            PydanticModelFactory,
-            ModuleInfo(None, "model"),
-            ast.Name(id="maybe_user"),
-            t.Optional[User],
-            "model",
-            parse_ast("""
-            import model
+            AssignExprCase(
+                source=ast.Name(id="maybe_user"),
+                target=t.Optional[User],  # type: ignore[arg-type]
+                mode="model",
+                expected=parse_module_ast("""
+                    import tests.integration.test_model.model
 
-            model.User(
-                id=maybe_user.id,
-                username=maybe_user.username,
-                created_at=maybe_user.created_at,
-                status=maybe_user.status.name,
-            ) if maybe_user is not None else None
-            """),
+                    tests.integration.test_model.model.User(
+                        id=maybe_user.id,
+                        username=maybe_user.username,
+                        created_at=maybe_user.created_at,
+                        status=maybe_user.status.name,
+                    ) if maybe_user is not None else None
+                """),
+            ),
+            id="optional user model",
         ),
         pytest.param(
-            PydanticModelFactory,
-            ModuleInfo(None, "model"),
-            ast.Name(id="users"),
-            list[User],
-            "model",
-            parse_ast("""
-            import model
+            AssignExprCase(
+                source=ast.Name(id="users"),
+                target=list[User],
+                mode="model",
+                expected=parse_module_ast("""
+                    import tests.integration.test_model.model
 
-            [
-                model.User(
-                    id=users_item.id,
-                    username=users_item.username,
-                    created_at=users_item.created_at,
-                    status=users_item.status.name,
-                )
-                for users_item in users
-            ]
-            """),
+                    [
+                        tests.integration.test_model.model.User(
+                            id=users_item.id,
+                            username=users_item.username,
+                            created_at=users_item.created_at,
+                            status=users_item.status.name,
+                        )
+                        for users_item in users
+                    ]
+                """),
+            ),
             id="list user model",
         ),
         pytest.param(
-            PydanticModelFactory,
-            ModuleInfo(None, "pydantic_models"),
-            ast.Name(id="user_map"),
-            dict[int, User],
-            "model",
-            parse_ast("""
-            import pydantic_models
+            AssignExprCase(
+                source=ast.Name(id="users"),
+                target=dict[str, User],
+                mode="model",
+                expected=parse_module_ast("""
+                    import tests.integration.test_model.model
 
-            {
-                user_map_key: pydantic_models.User(
-                    id=user_map_value.id,
-                    username=user_map_value.username,
-                    created_at=user_map_value.created_at,
-                    status=user_map_value.status.name,
-                )
-                for user_map_key, user_map_value in user_map.items()
-            }
-            """),
+                    {
+                        users_key: tests.integration.test_model.model.User(
+                            id=users_value.id,
+                            username=users_value.username,
+                            created_at=users_value.created_at,
+                            status=users_value.status.name,
+                        )
+                        for users_key, users_value in users.items()
+                    }
+                """),
+            ),
             id="dict user model",
         ),
         pytest.param(
-            PydanticModelFactory,
-            ModuleInfo(None, "model"),
-            ast.Name(id="data"),
-            ChatRoom,
-            "model",
-            parse_ast("""
-            import model
+            AssignExprCase(
+                source=ast.Name(id="data"),
+                target=ChatRoom,
+                mode="model",
+                expected=parse_module_ast("""
+                import tests.integration.test_model.model
 
-            model.ChatRoom(
-                name=data.name,
-                host=model.HostInfo(
-                    domain=data.host.domain,
-                    user=model.SuperUser(
-                        id=data.host.user.id,
-                        username=data.host.user.username,
-                        created_at=data.host.user.created_at,
-                        status=data.host.user.status.name,
-                        super_created_at=data.host.user.super_created_at,
-                    )
-                ),
-                users=[
-                    model.User(
-                        id=data_users_item.id,
-                        username=data_users_item.username,
-                        created_at=data_users_item.created_at,
-                        status=data_users_item.status.name,
-                    )
-                    for data_users_item in data.users
-                ],
-            )
-            """),
+                tests.integration.test_model.model.ChatRoom(
+                    name=data.name,
+                    host=tests.integration.test_model.model.HostInfo(
+                        domain=data.host.domain,
+                        user=tests.integration.test_model.model.SuperUser(
+                            id=data.host.user.id,
+                            username=data.host.user.username,
+                            created_at=data.host.user.created_at,
+                            status=data.host.user.status.name,
+                            super_created_at=data.host.user.super_created_at,
+                        ) if data.host.user is not None else None,
+                    ),
+                    users=[
+                        tests.integration.test_model.model.User(
+                            id=data_users_item.id,
+                            username=data_users_item.username,
+                            created_at=data_users_item.created_at,
+                            status=data_users_item.status.name,
+                        )
+                        for data_users_item in data.users
+                    ],
+                    tags={data_tags_item for data_tags_item in data.tags},
+                )
+                """),
+            ),
             id="chat room model",
         ),
         pytest.param(
-            PydanticModelFactory,
-            ModuleInfo(None, "model"),
-            ast.Name(id="pydantic_value"),
-            ChatRoom,
-            "original",
-            parse_ast("""
-            import tests.stub.structs
+            AssignExprCase(
+                source=ast.Name(id="orig"),
+                target=ChatRoom,
+                mode="original",
+                expected=parse_module_ast("""
+                import tests.stub.structs
 
-            tests.stub.structs.ChatRoom(
-                name=pydantic_value.name,
-                host=tests.stub.structs.HostInfo(
-                    domain=pydantic_value.host.domain,
-                    user=tests.stub.structs.SuperUser(
-                        id=pydantic_value.host.user.id,
-                        username=pydantic_value.host.user.username,
-                        created_at=pydantic_value.host.user.created_at,
-                        status=pydantic_value.host.user.status.name,
-                        super_created_at=pydantic_value.host.user.super_created_at,
-                    )
-                ),
-                users=[
-                    tests.stub.structs.User(
-                        id=pydantic_value_users_item.id,
-                        username=pydantic_value_users_item.username,
-                        created_at=pydantic_value_users_item.created_at,
-                        status=pydantic_value_users_item.status.name,
-                    )
-                    for pydantic_value_users_item in pydantic_value.users
-                ],
-            )
-            """),
+                tests.stub.structs.ChatRoom(
+                    name=orig.name,
+                    host=tests.stub.structs.HostInfo(
+                        domain=orig.host.domain,
+                        user=tests.stub.structs.SuperUser(
+                            id=orig.host.user.id,
+                            username=orig.host.user.username,
+                            created_at=orig.host.user.created_at,
+                            status=orig.host.user.status.name,
+                            super_created_at=orig.host.user.super_created_at,
+                        ) if orig.host.user is not None else None,
+                    ),
+                    users=[
+                        tests.stub.structs.User(
+                            id=orig_users_item.id,
+                            username=orig_users_item.username,
+                            created_at=orig_users_item.created_at,
+                            status=orig_users_item.status.name,
+                        )
+                        for orig_users_item in orig.users
+                    ],
+                    tags={orig_tags_item for orig_tags_item in orig.tags},
+                )
+                """),
+            ),
             id="chat room original",
         ),
     ],
 )
-def test_model_def_builder_assign_stmt_returns_expected_stmt(
-    source: ast.expr,
-    type_: type[object],
-    mode: t.Literal["original", "model"],
-    expected: ast.AST,
-    model_def_builder: ModelDefBuilder,
+def test_model_ast_builder_assign_stmt_returns_expected_stmt(
+    model_ast_builder: ModelASTBuilder,
     other_module_builder: ModuleASTBuilder,
+    case: AssignExprCase,
 ) -> None:
-    model_def_builder.update([type_])
+    model_ast_builder.update([case.target])
 
-    other_module_builder.append(ast.Expr(model_def_builder.assign_expr(source, type_, mode, other_module_builder)))
+    other_module_builder.append(
+        model_ast_builder.assign_expr(case.source, case.target, case.mode, other_module_builder)
+    )
 
-    assert ast.unparse(other_module_builder.build()) == ast.unparse(expected)
-
-
-@pytest.fixture
-def model_def_builder(model_factory: ModelFactory) -> ModelDefBuilder:
-    return ModelDefBuilder(model_factory)
+    assert render(other_module_builder) == render(case.expected)
 
 
 @pytest.fixture
-def model_module_info(stub_package_info: PackageInfo) -> ModuleInfo:
-    return ModuleInfo(stub_package_info, "model")
+def model_ast_builder(model_module_builder: ModuleASTBuilder, model_factory: ModelFactory) -> ModelASTBuilder:
+    return ModelASTBuilder(model_module_builder, model_factory)
 
 
 @pytest.fixture
-def model_module_builder(model_module_info: ModuleInfo) -> ModuleASTBuilder:
-    return ModuleASTBuilder(model_module_info)
+def model_module_builder(stub_package_info: PackageInfo, case: BaseCase) -> t.Iterator[ModuleASTBuilder]:
+    with package(stub_package_info) as pkg, pkg.module(case.model_module_name) as mod:
+        yield mod
 
 
 @pytest.fixture
-def other_module_builder(model_module_info: ModuleInfo) -> ModuleASTBuilder:
-    return ModuleASTBuilder(replace(model_module_info, name="other"))
+def other_module_builder(stub_package_info: PackageInfo) -> t.Iterator[ModuleASTBuilder]:
+    with package(stub_package_info) as pkg, pkg.module("other") as mod:
+        yield mod
 
 
 @pytest.fixture
-def model_factory_type() -> t.Optional[t.Callable[[ModuleASTBuilder], ModelFactory]]:
-    return None
-
-
-@pytest.fixture
-def model_factory(
-    model_factory_type: t.Optional[t.Callable[[ModuleASTBuilder], ModelFactory]],
-    model_module_builder: ModuleASTBuilder,
-) -> ModelFactory:
-    assert model_factory_type is not None
-    return model_factory_type(model_module_builder)
+def model_factory(case: BaseCase) -> ModelFactory:
+    return case.model_factory_type()

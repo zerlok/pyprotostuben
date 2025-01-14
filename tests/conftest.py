@@ -7,7 +7,7 @@ from _pytest.fixtures import SubRequest
 from pyprotostuben.python.info import ModuleInfo, PackageInfo
 
 
-def parse_ast(s: str) -> ast.AST:
+def parse_module_ast(s: str) -> ast.Module:
     """Parse a block of code. The code may be indented, parser will shift the content to the left."""
 
     lines = list[str]()
@@ -23,7 +23,10 @@ def parse_ast(s: str) -> ast.AST:
 
         lines.append(line[offset:])
 
-    return ast.parse("\n".join(lines))
+    node = ast.parse("\n".join(lines))
+    assert isinstance(node, ast.Module)
+
+    return node
 
 
 @pytest.fixture

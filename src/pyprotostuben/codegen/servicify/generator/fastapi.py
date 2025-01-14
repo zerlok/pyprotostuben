@@ -2,7 +2,7 @@ import inspect
 import typing as t
 from itertools import chain
 
-from pyprotostuben.codegen.model import ModelDefBuilder, PydanticModelFactory
+from pyprotostuben.codegen.model import ModelASTBuilder, PydanticModelFactory
 from pyprotostuben.codegen.servicify.abc import ServicifyCodeGenerator
 from pyprotostuben.codegen.servicify.model import EntrypointInfo, GeneratedFile, GeneratorContext, MethodInfo
 from pyprotostuben.python.builder2 import (
@@ -18,11 +18,15 @@ from pyprotostuben.python.info import ModuleInfo, TypeInfo
 from pyprotostuben.string_case import camel2snake, snake2camel
 
 
-class ModelRegistry:
-    def __init__(self, builder: ModelDefBuilder) -> None:
+class FastAPITypeRegistry:
+    def __init__(self, builder: ModelASTBuilder) -> None:
         self.__builder = builder
+        self.__interfaces = dict[str, TypeRef]()
         self.__requests = dict[tuple[str, str], TypeRef]()
         self.__responses = dict[tuple[str, str], TypeRef]()
+
+    def interface_ref(self, entrypoint: EntrypointInfo) -> TypeRef:
+        return self.__interfaces[entrypoint.name]
 
     def request_ref(self, entrypoint: EntrypointInfo, method: MethodInfo) -> TypeRef:
         return self.__requests[(entrypoint.name, method.name)]
@@ -46,6 +50,9 @@ class ModelRegistry:
     ) -> Expr:
         return self.__builder.assign_expr(source, annotation, "model", builder)
 
+    def register_interface(self, entrypoint: EntrypointInfo, ref: TypeRef) -> None:
+        self.__interfaces[entrypoint.name] = ref
+
     def register_request(
         self,
         entrypoint: EntrypointInfo,
@@ -53,7 +60,7 @@ class ModelRegistry:
         fields: t.Mapping[str, type[object]],
         doc: t.Optional[str],
     ) -> None:
-        model_ref = self.__builder.create(self.__create_model_name(entrypoint, method, "Request"), fields, doc)
+        model_ref = self.__builder.create_def(self.__create_model_name(entrypoint, method, "Request"), fields, doc)
         self.__requests[(entrypoint.name, method.name)] = model_ref
 
     def register_response(
@@ -63,7 +70,7 @@ class ModelRegistry:
         fields: t.Mapping[str, type[object]],
         doc: t.Optional[str],
     ) -> None:
-        model_ref = self.__builder.create(self.__create_model_name(entrypoint, method, "Response"), fields, doc)
+        model_ref = self.__builder.create_def(self.__create_model_name(entrypoint, method, "Response"), fields, doc)
         self.__responses[(entrypoint.name, method.name)] = model_ref
 
     def __create_model_name(
@@ -75,18 +82,16 @@ class ModelRegistry:
         return "".join(snake2camel(s) for s in (entrypoint.name, method.name, suffix))
 
 
-# TODO: try to reuse this code in protobuf brokrpc generator. Use some kind of factory to inject custom module naming
-#  (protobuf message types & serializer_module).
 class FastAPIServicifyCodeGenerator(ServicifyCodeGenerator):
     def generate(self, context: GeneratorContext) -> t.Sequence[GeneratedFile]:
         with package(context.package or "api") as pkg:
             with pkg.init():
                 pass
 
-            models = self.__build_model_module(context, pkg)
-            self.__build_abc_module(context, pkg, models)
-            self.__build_server_module(context, pkg, models)
-            self.__build_client_module(context, pkg, models)
+            registry = self.__build_model_module(context, pkg)
+            self.__build_abc_module(context, pkg, registry)
+            self.__build_server_module(context, pkg, registry)
+            self.__build_client_module(context, pkg, registry)
 
         return [
             GeneratedFile(
@@ -100,16 +105,18 @@ class FastAPIServicifyCodeGenerator(ServicifyCodeGenerator):
         self,
         context: GeneratorContext,
         pkg: PackageASTBuilder,
-        models: ModelRegistry,
+        registry: FastAPITypeRegistry,
     ) -> None:
-        with pkg.module("abc") as mod:
+        with pkg.module("abc") as _:
             for entrypoint in context.entrypoints:
-                with mod.class_def(entrypoint.name).docstring(entrypoint.doc).abstract() as entrypoint_def:
+                with _.class_def(entrypoint.name).docstring(entrypoint.doc).abstract() as entrypoint_def:
+                    registry.register_interface(entrypoint, entrypoint_def)
+
                     for method in entrypoint.methods:
                         with (
                             entrypoint_def.method_def(method.name)
-                            .pos_arg("request", models.request_ref(entrypoint, method))
-                            .returns(models.response_ref(entrypoint, method))
+                            .pos_arg("request", registry.request_ref(entrypoint, method))
+                            .returns(registry.response_ref(entrypoint, method))
                             .async_()
                             .abstract()
                             .not_implemented()
@@ -120,9 +127,9 @@ class FastAPIServicifyCodeGenerator(ServicifyCodeGenerator):
         self,
         context: GeneratorContext,
         pkg: PackageASTBuilder,
-    ) -> ModelRegistry:
+    ) -> FastAPITypeRegistry:
         with pkg.module("model") as mod:
-            models = ModelDefBuilder(mod, PydanticModelFactory())
+            models = ModelASTBuilder(mod, PydanticModelFactory())
             models.update(
                 set(
                     chain.from_iterable(
@@ -136,7 +143,7 @@ class FastAPIServicifyCodeGenerator(ServicifyCodeGenerator):
                 )
             )
 
-            registry = ModelRegistry(models)
+            registry = FastAPITypeRegistry(models)
 
             for entrypoint in context.entrypoints:
                 for method in entrypoint.methods:
@@ -157,95 +164,91 @@ class FastAPIServicifyCodeGenerator(ServicifyCodeGenerator):
 
         return registry
 
-    def __build_server_module(self, context: GeneratorContext, pkg: PackageASTBuilder, models: ModelRegistry) -> None:
-        abc_ref = ModuleInfo(pkg.info, "abc")
+    def __build_server_module(
+        self,
+        context: GeneratorContext,
+        pkg: PackageASTBuilder,
+        registry: FastAPITypeRegistry,
+    ) -> None:
         fastapi_router_ref = TypeInfo.build(ModuleInfo(None, "fastapi"), "APIRouter")
 
-        with pkg.module("server") as mod:
+        with pkg.module("server") as _:
             for entrypoint in context.entrypoints:
                 with (
-                    mod.func_def(f"create_{camel2snake(entrypoint.name)}_router")
-                    .pos_arg(
-                        name="entrypoint",
-                        annotation=TypeInfo.build(ModuleInfo(pkg.info, "abc"), snake2camel(entrypoint.name)),
-                    )
-                    .returns(fastapi_router_ref) as router_def
+                    _.func_def(f"create_{camel2snake(entrypoint.name)}_router")
+                    .pos_arg("entrypoint", registry.interface_ref(entrypoint))
+                    .returns(fastapi_router_ref)
                 ):
-                    router_def.assign_stmt(
+                    _.assign_stmt(
                         "router",
-                        value=router_def.call(fastapi_router_ref)
-                        .kwarg("prefix", router_def.const(f"/{camel2snake(entrypoint.name)}"))
-                        .kwarg("tags", router_def.const([entrypoint.name])),
+                        value=_.call(fastapi_router_ref)
+                        .kwarg("prefix", _.const(f"/{camel2snake(entrypoint.name)}"))
+                        .kwarg("tags", _.const([entrypoint.name])),
                     )
 
                     for method in entrypoint.methods:
-                        router_def.append(
-                            router_def.attr("router", "post")
+                        _.append(
+                            _.attr("router", "post")
                             .call()
-                            .kwarg("path", router_def.const(f"/{method.name}"))
-                            .kwarg(
-                                "description",
-                                router_def.const(method.doc) if method.doc is not None else router_def.none(),
-                            )
+                            .kwarg("path", _.const(f"/{method.name}"))
+                            .kwarg("description", _.const(method.doc) if method.doc is not None else _.none())
                             .call()
-                            .arg(mod.attr("entrypoint", method.name))
+                            .arg(_.attr("entrypoint", method.name))
                         )
 
-                    router_def.return_stmt(router_def.attr("router"))
+                    _.return_stmt(_.attr("router"))
 
-                with mod.class_def(f"{snake2camel(entrypoint.name)}Handler").inherits(
-                    TypeInfo.build(abc_ref, snake2camel(entrypoint.name))
+                with _.class_def(f"{snake2camel(entrypoint.name)}Handler").inherits(
+                    registry.interface_ref(entrypoint)
                 ) as handler_def:
                     with handler_def.init_self_attrs_def({"impl": entrypoint.type_}):
                         pass
 
                     for method in entrypoint.methods:
+                        response_ref = registry.response_ref(entrypoint, method)
+
                         with (
                             handler_def.method_def(method.name)
-                            .pos_arg("request", models.request_ref(entrypoint, method))
-                            .returns(models.response_ref(entrypoint, method) or handler_def.none())
+                            .pos_arg("request", registry.request_ref(entrypoint, method))
+                            .returns(response_ref or _.none())
                             .async_()
                             .override() as method_def
                         ):
                             for param in method.params:
-                                method_def.assign_stmt(
-                                    f"input_{param.name}",
-                                    value=models.request_param_unpack_expr(
-                                        source=mod.attr("request"),
-                                        param=param,
-                                        builder=method_def,
-                                    ),
+                                _.assign_stmt(
+                                    target=f"input_{param.name}",
+                                    value=registry.request_param_unpack_expr(_.attr("request"), param, method_def),
                                 )
 
                             impl_call = method_def.self_attr("impl", method.name).call(
-                                kwargs={param.name: method_def.attr(f"input_{param.name}") for param in method.params}
+                                kwargs={param.name: _.attr(f"input_{param.name}") for param in method.params}
                             )
 
-                            if method.returns is not None:
-                                method_def.assign_stmt("output", impl_call)
-                                method_def.assign_stmt(
+                            if method.returns is not None and response_ref is not None:
+                                _.assign_stmt("output", impl_call)
+                                _.assign_stmt(
                                     "response",
-                                    method_def.call(models.response_ref(entrypoint, method)).kwarg(
+                                    _.call(response_ref).kwarg(
                                         "payload",
-                                        models.response_payload_pack_expr(
-                                            method_def.attr("output"), method.returns, method_def
+                                        registry.response_payload_pack_expr(
+                                            _.attr("output"), method.returns, method_def
                                         ),
                                     ),
                                 )
-                                method_def.return_stmt(method_def.attr("response"))
+                                _.return_stmt(_.attr("response"))
 
                             else:
-                                method_def.append(impl_call)
+                                _.append(impl_call)
 
-    def __build_client_module(self, context: GeneratorContext, pkg: PackageASTBuilder, models: ModelRegistry) -> None:
+    def __build_client_module(
+        self, context: GeneratorContext, pkg: PackageASTBuilder, models: FastAPITypeRegistry
+    ) -> None:
         abc_ref = ModuleInfo(pkg.info, "abc")
         client_impl_ref = TypeInfo.build(ModuleInfo(None, "httpx"), "AsyncClient")
 
-        with pkg.module("client") as mod:
+        with pkg.module("client") as _:
             for entrypoint in context.entrypoints:
-                client_name = f"{snake2camel(entrypoint.name)}AsyncClient"
-
-                with mod.class_def(client_name).inherits(
+                with _.class_def(f"{snake2camel(entrypoint.name)}AsyncClient").inherits(
                     TypeInfo.build(abc_ref, snake2camel(entrypoint.name))
                 ) as client_def:
                     with client_def.init_self_attrs_def({"impl": client_impl_ref}):
@@ -255,21 +258,21 @@ class FastAPIServicifyCodeGenerator(ServicifyCodeGenerator):
                         with (
                             client_def.method_def(method.name)
                             .pos_arg("request", models.request_ref(entrypoint, method))
-                            .returns(models.response_ref(entrypoint, method) or client_def.const(None))
+                            .returns(models.response_ref(entrypoint, method) or _.const(None))
                             .async_()
-                            .override() as _
+                            .override() as method_def
                         ):
                             request_call_expr = (
-                                _.self_attr("impl", "post")
+                                method_def.self_attr("impl", "post")
                                 .call()
                                 .kwarg("url", client_def.const(f"/{camel2snake(entrypoint.name)}/{method.name}"))
                                 .kwarg(
                                     "json",
                                     _.attr("request", "model_dump")
                                     .call()
-                                    .kwarg("mode", mod.const("json"))
-                                    .kwarg("by_alias", mod.const(value=True))
-                                    .kwarg("exclude_none", mod.const(value=True)),
+                                    .kwarg("mode", _.const("json"))
+                                    .kwarg("by_alias", _.const(value=True))
+                                    .kwarg("exclude_none", _.const(value=True)),
                                 )
                                 .await_()
                             )

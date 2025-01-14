@@ -6,13 +6,13 @@ import pytest
 from _pytest.mark import ParameterSet
 
 from pyprotostuben.python.builder2 import ModuleASTBuilder, module, package, render
-from tests.conftest import parse_ast
+from tests.conftest import parse_module_ast
 
 
 def to_module_param(func: t.Callable[[], ModuleASTBuilder]) -> ParameterSet:
     expected_code = inspect.getdoc(func)
     assert expected_code is not None
-    return pytest.param(func(), parse_ast(expected_code), id=func.__name__)
+    return pytest.param(func(), parse_module_ast(expected_code), id=func.__name__)
 
 
 @to_module_param

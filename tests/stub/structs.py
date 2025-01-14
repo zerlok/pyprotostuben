@@ -1,4 +1,5 @@
 import enum
+import typing as t
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -25,7 +26,7 @@ class SuperUser(User):
 @dataclass(frozen=True, kw_only=True)
 class HostInfo:
     domain: str
-    user: SuperUser
+    user: t.Optional[SuperUser]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -33,6 +34,7 @@ class ChatRoom:
     name: str
     host: HostInfo
     users: list[User]
+    tags: t.Collection[str]
 
 
 class Rectangle:

@@ -103,7 +103,7 @@ class DefaultTypeWalkerTrait(TypeWalkerTrait):
 
             if (
                 getattr(obj, "__module__", None) == t.Optional.__module__
-                and getattr(obj, "__name__", None) == t.Optional.__name__
+                and getattr(obj, "__name__", None) == t.Optional.__name__  # type: ignore[attr-defined]
             ):
                 origin = t.Optional
                 inners = inners[:1]
