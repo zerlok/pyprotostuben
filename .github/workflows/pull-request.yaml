@@ -33,11 +33,12 @@ jobs:
           path: .venv-${{ matrix.python-version }}
           key: venv-${{ matrix.python-version }}-${{ hashFiles('poetry.lock') }}
       - name: list cache
-        run: ls -la $VIRTUAL_ENV
+        run: ls -la $VIRTUAL_ENV/bin
       - name: Setup venv
         if: steps.cache.outputs.cache-hit != 'true'
+        run: python -m venv .venv-${{ matrix.python-version }}
+      - name: Enable venv
         run: |
-          python -m venv .venv-${{ matrix.python-version }}
           . .venv-${{ matrix.python-version }}/bin/activate
           which python
           echo $VIRTUAL_ENV
