@@ -34,7 +34,7 @@ jobs:
       - name: Install the project dependencies
         run: poetry install --without=examples --all-extras
       - name: check env
-        run: ls -la .poetry-${{ matrix.python-version }}
+        run: ls -la /opt/poetry-${{ matrix.python-version }}/cache
       - name: Upload poetry venv
         uses: actions/upload-artifact@v4
         with:
