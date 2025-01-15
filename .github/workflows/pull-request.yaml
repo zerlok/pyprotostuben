@@ -24,16 +24,16 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: check python
         run: which python
-      - name: Install poetry
-        uses: abatilo/actions-poetry@v2
-      - name: Configure poetry
-        run: poetry config virtualenvs.create false
       - name: Setup venv
         run: |
           python -m venv .venv-${{ matrix.python-version }}
           . .venv-${{ matrix.python-version }}/bin/activate
           which python
           echo $VIRTUAL_ENV
+      - name: Install poetry
+        uses: abatilo/actions-poetry@v2
+      - name: Configure poetry
+        run: poetry config virtualenvs.create false
 #      - uses: actions/cache@v4
 #        name: Define a cache for venv
 #        with:
