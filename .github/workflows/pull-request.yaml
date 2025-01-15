@@ -9,7 +9,7 @@ on:
       - main
 
 jobs:
-  poetry env:
+  poetry-env:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -39,51 +39,22 @@ jobs:
           path: .poetry-${{ matrix.python-version }}
           name: poetry-${{ matrix.python-version }}
 
-  static checks:
+  static-checks:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         #        python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
         python-version: [ "3.9", "3.12"]
-    needs: poetry env
+    env:
+      POETRY_CACHE_DIR: .poetry-${{ matrix.python-version }}
+    needs: poetry-env
     steps:
       - name: Download poetry env
         uses: actions/download-artifact@v4
         with:
-          name: poetry-${{ matrix.python-version }}
-      - name: Run mypy
-        run: poetry run mypy
-      - name: Run ruff check
-        run: poetry run ruff check
-      - name: Run ruff format
-        run: poetry run ruff format --check
-
-
-  static:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-#        python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
-        python-version: [ "3.9", "3.12"]
-    env:
-      POETRY_CACHE_DIR: .poetry-${{ matrix.python-version }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install poetry
-        run: pip install poetry
-      - uses: actions/cache@v4
-        name: Define a cache for the virtual environment based on the dependencies lock file
-        with:
           path: .poetry-${{ matrix.python-version }}
-          key: poetry-${{ matrix.python-version }}-${{ hashFiles('poetry.lock') }}
-      - name: Install the project dependencies
-        run: poetry install --without=examples --all-extras
+          name: poetry-${{ matrix.python-version }}
       - name: Run mypy
         run: poetry run mypy
       - name: Run ruff check
