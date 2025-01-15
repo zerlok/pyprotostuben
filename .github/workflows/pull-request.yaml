@@ -21,14 +21,14 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Install poetry
+        uses: abatilo/actions-poetry@v2
+      - name: Configure poetry
+        run: poetry config virtualenvs.create false
       - name: Setup venv
         run: |
           python -m venv .venv-${{ matrix.python-version }}
           . .venv-${{ matrix.python-version }}/bin/activate
-      - name: Install poetry
-        uses: abatilo/actions-poetry@v2
-      - name: Setup a local virtual environment (if no poetry.toml file)
-        run: poetry config virtualenvs.create false
       - uses: actions/cache@v4
         name: Define a cache for venv
         with:
@@ -70,14 +70,14 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Install poetry
+        uses: abatilo/actions-poetry@v2
+      - name: Configure poetry
+        run: poetry config virtualenvs.create false
       - name: Setup venv
         run: |
           python -m venv .venv-${{ matrix.python-version }}
           . .venv-${{ matrix.python-version }}/bin/activate
-      - name: Install poetry
-        uses: abatilo/actions-poetry@v2
-      - name: Setup a local virtual environment (if no poetry.toml file)
-        run: poetry config virtualenvs.create false
       - uses: actions/cache@v4
         name: Define a cache for venv
         with:
