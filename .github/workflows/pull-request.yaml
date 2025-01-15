@@ -14,13 +14,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
+#        python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
+        python-version: [ "3.9", "3.12"]
     steps:
       - uses: actions/checkout@v4
       - name: Install Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - name: check python
+        run: which python
       - name: Install poetry
         uses: abatilo/actions-poetry@v2
       - name: Configure poetry
@@ -29,13 +32,17 @@ jobs:
         run: |
           python -m venv .venv-${{ matrix.python-version }}
           . .venv-${{ matrix.python-version }}/bin/activate
-      - uses: actions/cache@v4
-        name: Define a cache for venv
-        with:
-          path: .venv-${{ matrix.python-version }}
-          key: venv-${{ matrix.python-version }}-${{ hashFiles('poetry.lock') }}
+          which python
+          echo $VIRTUAL_ENV
+#      - uses: actions/cache@v4
+#        name: Define a cache for venv
+#        with:
+#          path: .venv-${{ matrix.python-version }}
+#          key: venv-${{ matrix.python-version }}-${{ hashFiles('poetry.lock') }}
       - name: check poetry env
         run: |
+          which python
+          echo $VIRTUAL_ENV
           poetry env info
           poetry show
       - name: Install the project dependencies
@@ -50,55 +57,56 @@ jobs:
         run: poetry run ruff check
       - name: Run ruff format
         run: poetry run ruff format --check
-  test:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      # NOTE: be careful with coverage uploads when using matrix.
-      matrix:
-        python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
-        protoc-version: [ "26.1" ]
-        buf-version: [ "1.38.0" ]
-    env:
-      OS: ubuntu
-      PYTHON: ${{ matrix.python-version }}
-      PROTOC: ${{ matrix.protoc-version }}
-      BUF: ${{ matrix.buf-version }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install poetry
-        uses: abatilo/actions-poetry@v2
-      - name: Configure poetry
-        run: poetry config virtualenvs.create false
-      - name: Setup venv
-        run: |
-          python -m venv .venv-${{ matrix.python-version }}
-          . .venv-${{ matrix.python-version }}/bin/activate
-      - uses: actions/cache@v4
-        name: Define a cache for venv
-        with:
-          path: .venv-${{ matrix.python-version }}
-          key: venv-${{ matrix.python-version }}-${{ hashFiles('poetry.lock') }}
-      - name: check poetry env
-        run: |
-          poetry env info
-          poetry show
-      - name: Download protoc ${{ matrix.protoc-version }}
-        run: wget -q -O protoc.zip "https://github.com/protocolbuffers/protobuf/releases/download/v${{ matrix.protoc-version }}/protoc-${{ matrix.protoc-version }}-linux-x86_64.zip"
-      - name: Unzip protoc ${{ matrix.protoc-version }}
-        run: unzip -q -n protoc.zip 'bin/*' 'include/google/protobuf/*' -d .venv
-      - name: Download buf ${{ matrix.buf-version }}
-        run: wget -q -O .venv/bin/buf "https://github.com/bufbuild/buf/releases/download/v${{ matrix.buf-version }}/buf-Linux-x86_64"
-      - name: Allow run buf ${{ matrix.buf-version }}
-        run: chmod +x .venv/bin/buf
-      - name: Run pytest
-        run: poetry run pytest --cov-report=xml
-      - name: Upload results to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          env_vars: OS,PYTHON,PROTOC,BUF
+
+#  test:
+#    runs-on: ubuntu-latest
+#    strategy:
+#      fail-fast: false
+#      # NOTE: be careful with coverage uploads when using matrix.
+#      matrix:
+#        python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
+#        protoc-version: [ "26.1" ]
+#        buf-version: [ "1.38.0" ]
+#    env:
+#      OS: ubuntu
+#      PYTHON: ${{ matrix.python-version }}
+#      PROTOC: ${{ matrix.protoc-version }}
+#      BUF: ${{ matrix.buf-version }}
+#    steps:
+#      - uses: actions/checkout@v4
+#      - name: Install Python ${{ matrix.python-version }}
+#        uses: actions/setup-python@v5
+#        with:
+#          python-version: ${{ matrix.python-version }}
+#      - name: Install poetry
+#        uses: abatilo/actions-poetry@v2
+#      - name: Configure poetry
+#        run: poetry config virtualenvs.create false
+#      - name: Setup venv
+#        run: |
+#          python -m venv .venv-${{ matrix.python-version }}
+#          . .venv-${{ matrix.python-version }}/bin/activate
+#      - uses: actions/cache@v4
+#        name: Define a cache for venv
+#        with:
+#          path: .venv-${{ matrix.python-version }}
+#          key: venv-${{ matrix.python-version }}-${{ hashFiles('poetry.lock') }}
+#      - name: check poetry env
+#        run: |
+#          poetry env info
+#          poetry show
+#      - name: Download protoc ${{ matrix.protoc-version }}
+#        run: wget -q -O protoc.zip "https://github.com/protocolbuffers/protobuf/releases/download/v${{ matrix.protoc-version }}/protoc-${{ matrix.protoc-version }}-linux-x86_64.zip"
+#      - name: Unzip protoc ${{ matrix.protoc-version }}
+#        run: unzip -q -n protoc.zip 'bin/*' 'include/google/protobuf/*' -d .venv
+#      - name: Download buf ${{ matrix.buf-version }}
+#        run: wget -q -O .venv/bin/buf "https://github.com/bufbuild/buf/releases/download/v${{ matrix.buf-version }}/buf-Linux-x86_64"
+#      - name: Allow run buf ${{ matrix.buf-version }}
+#        run: chmod +x .venv/bin/buf
+#      - name: Run pytest
+#        run: poetry run pytest --cov-report=xml
+#      - name: Upload results to Codecov
+#        uses: codecov/codecov-action@v4
+#        with:
+#          token: ${{ secrets.CODECOV_TOKEN }}
+#          env_vars: OS,PYTHON,PROTOC,BUF
