@@ -36,11 +36,11 @@ jobs:
         run: pip install -U poetry
       - name: Configure poetry
         run: poetry config virtualenvs.create false
-#      - uses: actions/cache@v4
-#        name: Define a cache for venv
-#        with:
-#          path: .venv-${{ matrix.python-version }}
-#          key: venv-${{ matrix.python-version }}-${{ hashFiles('poetry.lock') }}
+      - uses: actions/cache@v4
+        name: Define a cache for venv
+        with:
+          path: .venv-${{ matrix.python-version }}
+          key: venv-${{ matrix.python-version }}-${{ hashFiles('poetry.lock') }}
       - name: check poetry env
         run: |
           which python
