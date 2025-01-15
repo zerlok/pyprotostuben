@@ -33,11 +33,14 @@ jobs:
           key: poetry-${{ matrix.python-version }}-${{ hashFiles('poetry.lock') }}
       - name: Install the project dependencies
         run: poetry install --without=examples --all-extras
+      - name: check env
+        run: ls -la .poetry-${{ matrix.python-version }}
       - name: Upload poetry venv
         uses: actions/upload-artifact@v4
         with:
           path: .poetry-${{ matrix.python-version }}
           name: poetry-${{ matrix.python-version }}
+          if-no-files-found: error
 
   static-checks:
     runs-on: ubuntu-latest
