@@ -40,6 +40,7 @@ jobs:
           which python
           echo $VIRTUAL_ENV
       - name: Install poetry
+        if: steps.cache.outputs.cache-hit != 'true'
         run: pip install -U poetry
       - name: Configure poetry
         run: poetry config virtualenvs.create false
@@ -50,6 +51,7 @@ jobs:
           poetry env info
           poetry show
       - name: Install the project dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
         run: poetry install --without=examples --all-extras
       - name: Check env info
         run: poetry env info
