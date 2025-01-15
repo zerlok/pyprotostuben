@@ -21,15 +21,23 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: poetry
-        # see details (matrix, python-version, python-version-file, etc.)
-        # https://github.com/actions/setup-python
+      - name: Setup venv
+        run: |
+          python -m venv .venv-${{ matrix.python-version }}
+          . .venv-${{ matrix.python-version }}/bin/activate
       - name: Install poetry
         uses: abatilo/actions-poetry@v2
       - name: Setup a local virtual environment (if no poetry.toml file)
+        run: poetry config virtualenvs.create false
+      - uses: actions/cache@v4
+        name: Define a cache for venv
+        with:
+          path: .venv-${{ matrix.python-version }}
+          key: venv-${{ matrix.python-version }}-${{ hashFiles('poetry.lock') }}
+      - name: check poetry env
         run: |
-          poetry config virtualenvs.create true
-          poetry config virtualenvs.in-project true
+          poetry env info
+          poetry show
       - name: Install the project dependencies
         run: poetry install --without=examples --all-extras
       - name: Check env info
@@ -62,21 +70,23 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: poetry
-        # see details (matrix, python-version, python-version-file, etc.)
-        # https://github.com/actions/setup-python
+      - name: Setup venv
+        run: |
+          python -m venv .venv-${{ matrix.python-version }}
+          . .venv-${{ matrix.python-version }}/bin/activate
       - name: Install poetry
         uses: abatilo/actions-poetry@v2
       - name: Setup a local virtual environment (if no poetry.toml file)
+        run: poetry config virtualenvs.create false
+      - uses: actions/cache@v4
+        name: Define a cache for venv
+        with:
+          path: .venv-${{ matrix.python-version }}
+          key: venv-${{ matrix.python-version }}-${{ hashFiles('poetry.lock') }}
+      - name: check poetry env
         run: |
-          poetry config virtualenvs.create true
-          poetry config virtualenvs.in-project true
-      - name: Install the project dependencies
-        run: poetry install --without=examples --all-extras
-      - name: Check env info
-        run: poetry env info
-      - name: Check project info
-        run: poetry show
+          poetry env info
+          poetry show
       - name: Download protoc ${{ matrix.protoc-version }}
         run: wget -q -O protoc.zip "https://github.com/protocolbuffers/protobuf/releases/download/v${{ matrix.protoc-version }}/protoc-${{ matrix.protoc-version }}-linux-x86_64.zip"
       - name: Unzip protoc ${{ matrix.protoc-version }}
