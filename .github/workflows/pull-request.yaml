@@ -17,7 +17,7 @@ jobs:
         #        python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
         python-version: [ "3.9", "3.12"]
     env:
-      POETRY_CACHE_DIR: .poetry-${{ matrix.python-version }}
+      POETRY_CACHE_DIR: /opt/poetry-${{ matrix.python-version }}/cache
     steps:
       - uses: actions/checkout@v4
       - name: Install Python ${{ matrix.python-version }}
@@ -29,7 +29,7 @@ jobs:
       - uses: actions/cache@v4
         name: Define a cache for the virtual environment based on the dependencies lock file
         with:
-          path: .poetry-${{ matrix.python-version }}
+          path: /opt/poetry-${{ matrix.python-version }}/cache
           key: poetry-${{ matrix.python-version }}-${{ hashFiles('poetry.lock') }}
       - name: Install the project dependencies
         run: poetry install --without=examples --all-extras
@@ -38,7 +38,7 @@ jobs:
       - name: Upload poetry venv
         uses: actions/upload-artifact@v4
         with:
-          path: .poetry-${{ matrix.python-version }}
+          path: /opt/poetry-${{ matrix.python-version }}/cache
           name: poetry-${{ matrix.python-version }}
           if-no-files-found: error
 
@@ -50,13 +50,13 @@ jobs:
         #        python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
         python-version: [ "3.9", "3.12"]
     env:
-      POETRY_CACHE_DIR: .poetry-${{ matrix.python-version }}
+      POETRY_CACHE_DIR: /opt/poetry-${{ matrix.python-version }}/cache
     needs: poetry-env
     steps:
       - name: Download poetry env
         uses: actions/download-artifact@v4
         with:
-          path: .poetry-${{ matrix.python-version }}
+          path: /opt/poetry-${{ matrix.python-version }}/cache
           name: poetry-${{ matrix.python-version }}
       - name: Run mypy
         run: poetry run mypy
