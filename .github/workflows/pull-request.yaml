@@ -16,6 +16,8 @@ jobs:
       matrix:
 #        python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
         python-version: [ "3.9", "3.12"]
+    env:
+      VIRTUAL_ENV: .venv-${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@v4
       - name: Install Python ${{ matrix.python-version }}
