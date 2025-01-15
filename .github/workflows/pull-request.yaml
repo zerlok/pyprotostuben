@@ -31,7 +31,7 @@ jobs:
           which python
           echo $VIRTUAL_ENV
       - name: Install poetry
-        uses: abatilo/actions-poetry@v2
+        run: pip install -U poetry
       - name: Configure poetry
         run: poetry config virtualenvs.create false
 #      - uses: actions/cache@v4
