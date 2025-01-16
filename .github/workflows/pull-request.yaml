@@ -63,6 +63,8 @@ jobs:
         with:
           path: /opt/venv-${{ matrix.python-version }}
           name: venv-${{ matrix.python-version }}
+      - name: Activate venv
+        run: . $VIRTUAL_ENV/bin/activate
       - name: Run mypy
         run: poetry run mypy
       - name: Run ruff check
