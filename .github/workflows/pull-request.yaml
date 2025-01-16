@@ -45,11 +45,11 @@ jobs:
       - name: Run ruff format
         run: poetry run ruff format --check
       - name: Download protoc ${{ matrix.protoc-version }}
-        run: wget -q -O protoc.zip "https://github.com/protocolbuffers/protobuf/releases/download/v${{ matrix.protoc-version }}/protoc-${{ matrix.protoc-version }}-linux-x86_64.zip"
+        run: wget -O protoc.zip "https://github.com/protocolbuffers/protobuf/releases/download/v${{ matrix.protoc-version }}/protoc-${{ matrix.protoc-version }}-linux-x86_64.zip"
       - name: Unzip protoc ${{ matrix.protoc-version }}
-        run: unzip -q -n protoc.zip 'bin/*' 'include/google/protobuf/*' -d $(poetry env info -p)
+        run: unzip -n protoc.zip 'bin/*' 'include/google/protobuf/*' -d $(poetry env info -p)
       - name: Download buf ${{ matrix.buf-version }}
-        run: wget -q -O $(poetry env info -p)/buf "https://github.com/bufbuild/buf/releases/download/v${{ matrix.buf-version }}/buf-Linux-x86_64"
+        run: wget -O $(poetry env info -p)/buf "https://github.com/bufbuild/buf/releases/download/v${{ matrix.buf-version }}/buf-Linux-x86_64"
       - name: Allow run buf ${{ matrix.buf-version }}
         run: chmod +x $(poetry env info -p)/bin/buf
       - name: Run pytest
