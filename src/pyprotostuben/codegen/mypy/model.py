@@ -2,7 +2,7 @@ import ast
 import typing as t
 from dataclasses import dataclass, field
 
-from pyprotostuben.python.ast_builder import TypeRef
+from pyprotostuben.python.builder import TypeRef
 
 
 @dataclass()

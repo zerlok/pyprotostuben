@@ -215,11 +215,11 @@ class TestTypeInfo:
         [
             pytest.param(
                 "builtins:int",
-                TypeInfo(ModuleInfo(None, "builtins"), ["int"]),
+                TypeInfo(ModuleInfo(None, "builtins"), ("int",)),
             ),
             pytest.param(
                 "pyprotostuben.python.info:TypeInfo",
-                TypeInfo(ModuleInfo(PackageInfo(PackageInfo(None, "pyprotostuben"), "python"), "info"), ["TypeInfo"]),
+                TypeInfo(ModuleInfo(PackageInfo(PackageInfo(None, "pyprotostuben"), "python"), "info"), ("TypeInfo",)),
             ),
         ],
     )
@@ -231,11 +231,11 @@ class TestTypeInfo:
         [
             pytest.param(
                 int,
-                TypeInfo(ModuleInfo(None, "builtins"), ["int"]),
+                TypeInfo(ModuleInfo(None, "builtins"), ("int",)),
             ),
             pytest.param(
                 TypeInfo,
-                TypeInfo(ModuleInfo(PackageInfo(PackageInfo(None, "pyprotostuben"), "python"), "info"), ["TypeInfo"]),
+                TypeInfo(ModuleInfo(PackageInfo(PackageInfo(None, "pyprotostuben"), "python"), "info"), ("TypeInfo",)),
             ),
         ],
     )
