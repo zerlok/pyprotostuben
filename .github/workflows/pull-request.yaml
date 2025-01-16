@@ -9,66 +9,28 @@ on:
       - main
 
 jobs:
-  poetry-venv:
+  static:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        #        python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
-        python-version: [ "3.9", "3.12"]
-    env:
-      VIRTUAL_ENV: /opt/venv-${{ matrix.python-version }}
+        python-version: [ "3.9" ]
     steps:
       - uses: actions/checkout@v4
       - name: Install Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Define a cache for venv
-        uses: actions/cache@v4
-        with:
-          path: /opt/venv-${{ matrix.python-version }}
-          key: venv-${{ matrix.python-version }}-${{ hashFiles('poetry.lock') }}
-      - name: Create venv
-        run: python -m venv $VIRTUAL_ENV
       - name: Install poetry
-        run: $VIRTUAL_ENV/bin/pip install poetry
-      - name: Install the project dependencies
-        run: $VIRTUAL_ENV/bin/poetry install --without=examples --all-extras
-      - name: Upload poetry venv
-        uses: actions/upload-artifact@v4
-        with:
-          path: /opt/venv-${{ matrix.python-version }}
-          name: venv-${{ matrix.python-version }}
-          if-no-files-found: error
-
-  static-checks:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        #        python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
-        python-version: [ "3.9", "3.12"]
-    env:
-      VIRTUAL_ENV: /opt/venv-${{ matrix.python-version }}
-    needs: poetry-venv
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Download poetry venv
-        uses: actions/download-artifact@v4
-        with:
-          path: /opt/venv-${{ matrix.python-version }}
-          name: venv-${{ matrix.python-version }}
+        run: pip install poetry
+      - name: Install project dependencies
+        run: poetry install --without=examples --all-extras
       - name: Run mypy
-        run: $VIRTUAL_ENV/bin/mypy
+        run: poetry run mypy
       - name: Run ruff check
-        run: $VIRTUAL_ENV/bin/ruff check
+        run: poetry run ruff check
       - name: Run ruff format
-        run: $VIRTUAL_ENV/bin/ruff format --check
+        run: poetry run ruff format --check
 
 #  test:
 #    runs-on: ubuntu-latest
@@ -82,31 +44,27 @@ jobs:
 #    env:
 #      OS: ubuntu
 #      PYTHON: ${{ matrix.python-version }}
-#      PROTOC: ${{ matrix.protoc-version }}
-#      BUF: ${{ matrix.buf-version }}
 #    steps:
 #      - uses: actions/checkout@v4
 #      - name: Install Python ${{ matrix.python-version }}
-#        uses: actions/setup-python@v5
+#        uses: actions/setup-python@v4
 #        with:
 #          python-version: ${{ matrix.python-version }}
+#        # see details (matrix, python-version, python-version-file, etc.)
+#        # https://github.com/actions/setup-python
 #      - name: Install poetry
 #        uses: abatilo/actions-poetry@v2
-#      - name: Configure poetry
-#        run: poetry config virtualenvs.create false
-#      - name: Setup venv
+#      - name: Setup a local virtual environment (if no poetry.toml file)
 #        run: |
-#          python -m venv .venv-${{ matrix.python-version }}
-#          . .venv-${{ matrix.python-version }}/bin/activate
-#      - uses: actions/cache@v4
-#        name: Define a cache for venv
+#          poetry config virtualenvs.create true --local
+#          poetry config virtualenvs.in-project true --local
+#      - uses: actions/cache@v3
+#        name: Define a cache for the virtual environment based on the dependencies lock file
 #        with:
-#          path: .venv-${{ matrix.python-version }}
-#          key: venv-${{ matrix.python-version }}-${{ hashFiles('poetry.lock') }}
-#      - name: check poetry env
-#        run: |
-#          poetry env info
-#          poetry show
+#          path: ./.venv
+#          key: venv-${{ hashFiles('poetry.lock') }}
+#      - name: Install the project dependencies
+#        run: poetry install --without=examples --all-extras
 #      - name: Download protoc ${{ matrix.protoc-version }}
 #        run: wget -q -O protoc.zip "https://github.com/protocolbuffers/protobuf/releases/download/v${{ matrix.protoc-version }}/protoc-${{ matrix.protoc-version }}-linux-x86_64.zip"
 #      - name: Unzip protoc ${{ matrix.protoc-version }}
@@ -121,4 +79,4 @@ jobs:
 #        uses: codecov/codecov-action@v4
 #        with:
 #          token: ${{ secrets.CODECOV_TOKEN }}
-#          env_vars: OS,PYTHON,PROTOC,BUF
+#          env_vars: OS,PYTHON
