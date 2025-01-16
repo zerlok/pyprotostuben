@@ -50,7 +50,7 @@ jobs:
       - name: Unzip protoc ${{ matrix.protoc-version }}
         run: unzip -n protoc.zip 'bin/*' 'include/google/protobuf/*' -d $(poetry env info -p)
       - name: Download buf ${{ matrix.buf-version }}
-        run: wget -O $(poetry env info -p)/buf "https://github.com/bufbuild/buf/releases/download/v${{ matrix.buf-version }}/buf-Linux-x86_64"
+        run: wget -O $(poetry env info -p)/bin/buf "https://github.com/bufbuild/buf/releases/download/v${{ matrix.buf-version }}/buf-Linux-x86_64"
       - name: Allow run buf ${{ matrix.buf-version }}
         run: chmod +x $(poetry env info -p)/bin/buf
       - name: Run pytest
