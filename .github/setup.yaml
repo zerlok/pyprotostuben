@@ -1,0 +1,63 @@
+name: Setup
+
+inputs:
+  python-version:
+    required: true
+    type: string
+  protoc-version:
+    required: false
+    type: string
+    default: ''
+  buf-version:
+    required: false
+    type: string
+    default: ''
+  fail-on-cache-miss:
+    required: false
+    type: string
+    default: 'false'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Git checkout
+      uses: actions/checkout@v4
+
+    - name: Install Python ${{ inputs.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install poetry
+      run: pip install poetry
+
+    - name: Configure poetry
+      run: |
+        poetry config virtualenvs.create true
+        poetry config virtualenvs.in-project false
+
+    - name: Cache venv
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pypoetry
+        key: venv-${{ inputs.python-version }}-${{ hashFiles('poetry.lock') }}
+        fail-on-cache-miss: ${{ inputs.fail-on-cache-miss }}
+
+    - name: Install project dependencies
+      run: poetry install --without=examples --all-extras
+
+    - name: Download protoc ${{ inputs.protoc-version }}
+      if: inputs.protoc-version != '' && steps.cache.outputs.cache-hit != 'true'
+      run: wget -O protoc.zip "https://github.com/protocolbuffers/protobuf/releases/download/v${{ inputs.protoc-version }}/protoc-${{ inputs.protoc-version }}-linux-x86_64.zip"
+    - name: Unzip protoc ${{ inputs.protoc-version }}
+      if: inputs.protoc-version != '' && steps.cache.outputs.cache-hit != 'true'
+      run: unzip -n protoc.zip 'bin/*' 'include/google/protobuf/*' -d $(poetry env info -p)
+
+    - name: Download buf ${{ inputs.buf-version }}
+      if: inputs.buf-version != '' && steps.cache.outputs.cache-hit != 'true'
+      run: wget -O $(poetry env info -p)/bin/buf "https://github.com/bufbuild/buf/releases/download/v${{ inputs.buf-version }}/buf-Linux-x86_64"
+    - name: Allow run buf ${{ inputs.buf-version }}
+      if: inputs.buf-version != '' && steps.cache.outputs.cache-hit != 'true'
+      run: chmod +x $(poetry env info -p)/bin/buf
+
