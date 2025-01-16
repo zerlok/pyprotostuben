@@ -15,22 +15,9 @@ from types import ModuleType
 
 
 @dataclass(frozen=True)
-class NamespaceInfo:
-    parent: t.Optional["NamespaceInfo"]
-    name: str
-
-    @ft.cached_property
-    def parts(self) -> t.Sequence[str]:
-        return *(self.parent.parts if self.parent is not None else ()), self.name
-
-    @ft.cached_property
-    def qualname(self) -> str:
-        return ".".join(self.parts)
-
-
-@dataclass(frozen=True)
-class PackageInfo(NamespaceInfo):
+class PackageInfo:
     parent: t.Optional["PackageInfo"]
+    name: str
 
     @classmethod
     def build(cls, *parts: str) -> "PackageInfo":
@@ -47,13 +34,22 @@ class PackageInfo(NamespaceInfo):
         return cls.build(*parts) if parts else None
 
     @ft.cached_property
+    def parts(self) -> t.Sequence[str]:
+        return *(self.parent.parts if self.parent is not None else ()), self.name
+
+    @ft.cached_property
+    def qualname(self) -> str:
+        return ".".join(self.parts)
+
+    @ft.cached_property
     def directory(self) -> Path:
         return Path(*self.parts)
 
 
 @dataclass(frozen=True)
-class ModuleInfo(NamespaceInfo):
+class ModuleInfo:
     parent: t.Optional[PackageInfo]
+    name: str
 
     @classmethod
     def from_str(cls, ref: str) -> "ModuleInfo":
@@ -63,6 +59,14 @@ class ModuleInfo(NamespaceInfo):
     @classmethod
     def from_module(cls, obj: ModuleType) -> "ModuleInfo":
         return cls.from_str(obj.__name__)
+
+    @ft.cached_property
+    def parts(self) -> t.Sequence[str]:
+        return *(self.parent.parts if self.parent is not None else ()), self.name
+
+    @ft.cached_property
+    def qualname(self) -> str:
+        return ".".join(self.parts)
 
     @property
     def package(self) -> t.Optional[PackageInfo]:

@@ -202,7 +202,7 @@ class BrokRPCModuleGenerator(ProtoVisitorDecorator[BrokRPCContext], LoggerMixin)
         parent = context.meta
 
         name = camel2snake(proto.name)
-        qualname = f"/{context.root.proto.package}/{context.parent.proto.name}/{proto.name}"
+        qualname = f"/{context.root.proto.package}/{context.parent.name}/{proto.name}"
         doc = build_docstring(context.location)
         server_input = self.__registry.resolve_proto_method_client_input(proto)
         server_output = self.__registry.resolve_proto_method_server_output(proto)

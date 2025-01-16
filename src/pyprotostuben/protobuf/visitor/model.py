@@ -28,15 +28,16 @@ Proto = t.Union[
 ]
 
 M = t.TypeVar("M")
-P_co = t.TypeVar("P_co", covariant=True, bound=Proto)
-T_co = t.TypeVar("T_co", covariant=True, bound=Proto)
 
 
 @dataclass()
-class _BaseContext(t.Generic[M, T_co]):
+class _BaseContext(t.Generic[M]):
     _meta: t.Optional[M]
-    proto: T_co
     path: t.Sequence[int]
+
+    @property
+    def name(self) -> str:
+        raise NotImplementedError
 
     @property
     def meta(self) -> M:
@@ -50,12 +51,18 @@ class _BaseContext(t.Generic[M, T_co]):
         self._meta = value
 
     @property
-    def parts(self) -> t.Sequence["_BaseContext[M, Proto]"]:
+    def parts(self) -> t.Sequence["_BaseContext[M]"]:
         return (self,)
 
 
 @dataclass()
-class FileContext(_BaseContext[M, FileDescriptorProto]):
+class FileContext(_BaseContext[M]):
+    proto: FileDescriptorProto
+
+    @property
+    def name(self) -> str:
+        return self.proto.name
+
     @cached_property
     def file(self) -> ProtoFile:
         return ProtoFile(self.proto)
@@ -66,8 +73,8 @@ class FileContext(_BaseContext[M, FileDescriptorProto]):
 
 
 @dataclass()
-class _ChildContext(_BaseContext[M, T_co], t.Generic[M, T_co, P_co]):
-    parent: _BaseContext[M, P_co]
+class _ChildContext(_BaseContext[M]):
+    parent: _BaseContext[M]
 
     @cached_property
     def root(self) -> FileContext[M]:
@@ -85,7 +92,7 @@ class _ChildContext(_BaseContext[M, T_co], t.Generic[M, T_co, P_co]):
         return self.root.file
 
     @cached_property
-    def parts(self) -> t.Sequence["_BaseContext[M, Proto]"]:
+    def parts(self) -> t.Sequence[_BaseContext[M]]:
         return *self.parent.parts, self
 
     @cached_property
@@ -94,40 +101,72 @@ class _ChildContext(_BaseContext[M, T_co], t.Generic[M, T_co, P_co]):
 
 
 @dataclass()
-class EnumContext(_ChildContext[M, EnumDescriptorProto, t.Union[FileDescriptorProto, DescriptorProto]]):
-    pass
+class EnumContext(_ChildContext[M]):
+    proto: EnumDescriptorProto
+
+    @property
+    def name(self) -> str:
+        return self.proto.name
 
 
 @dataclass()
-class EnumValueContext(_ChildContext[M, EnumValueDescriptorProto, EnumDescriptorProto]):
-    pass
+class EnumValueContext(_ChildContext[M]):
+    proto: EnumValueDescriptorProto
+
+    @property
+    def name(self) -> str:
+        return self.proto.name
 
 
 @dataclass()
-class DescriptorContext(_ChildContext[M, DescriptorProto, t.Union[FileDescriptorProto, DescriptorProto]]):
-    pass
+class DescriptorContext(_ChildContext[M]):
+    proto: DescriptorProto
+
+    @property
+    def name(self) -> str:
+        return self.proto.name
 
 
 @dataclass()
-class OneofContext(_ChildContext[M, OneofDescriptorProto, DescriptorProto]):
-    pass
+class OneofContext(_ChildContext[M]):
+    proto: OneofDescriptorProto
+
+    @property
+    def name(self) -> str:
+        return self.proto.name
 
 
 @dataclass()
-class FieldContext(_ChildContext[M, FieldDescriptorProto, t.Union[FileDescriptorProto, DescriptorProto]]):
-    pass
+class FieldContext(_ChildContext[M]):
+    proto: FieldDescriptorProto
+
+    @property
+    def name(self) -> str:
+        return self.proto.name
 
 
 @dataclass()
-class ServiceContext(_ChildContext[M, ServiceDescriptorProto, FileDescriptorProto]):
-    pass
+class ServiceContext(_ChildContext[M]):
+    proto: ServiceDescriptorProto
+
+    @property
+    def name(self) -> str:
+        return self.proto.name
 
 
 @dataclass()
-class MethodContext(_ChildContext[M, MethodDescriptorProto, ServiceDescriptorProto]):
-    pass
+class MethodContext(_ChildContext[M]):
+    proto: MethodDescriptorProto
+
+    @property
+    def name(self) -> str:
+        return self.proto.name
 
 
 @dataclass()
-class ExtensionContext(_ChildContext[M, FieldDescriptorProto, t.Union[FileDescriptorProto, DescriptorProto]]):
-    pass
+class ExtensionContext(_ChildContext[M]):
+    proto: FieldDescriptorProto
+
+    @property
+    def name(self) -> str:
+        return self.proto.name
