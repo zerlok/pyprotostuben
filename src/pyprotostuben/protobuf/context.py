@@ -141,7 +141,7 @@ class ContextBuilder(ProtoVisitor[BuildContext], LoggerMixin):
             DescriptorContext[BuildContext],
         ],
     ) -> tuple[str, ModuleInfo, t.Sequence[str]]:
-        ns = tuple(part.proto.name for part in context.parts[1:])
+        ns = tuple(part.name for part in context.parts[1:])
         proto_path = ".".join(ns)
 
         qualname = f".{root.proto.package}.{proto_path}"
