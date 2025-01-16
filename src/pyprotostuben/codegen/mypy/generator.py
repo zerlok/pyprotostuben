@@ -319,4 +319,4 @@ class MypyStubAstGenerator(ProtoVisitorDecorator[MypyStubContext], LoggerMixin):
         context: t.Union[EnumContext[MypyStubContext], DescriptorContext[MypyStubContext]],
     ) -> t.Sequence[str]:
         # skip first part (root = file descriptor)
-        return [part.proto.name for part in context.parts[1:]]
+        return [part.name for part in context.parts[1:]]
