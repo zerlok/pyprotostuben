@@ -9,7 +9,7 @@ on:
       - main
 
 jobs:
-  poetry-env:
+  poetry-venv:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -17,29 +17,29 @@ jobs:
         #        python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
         python-version: [ "3.9", "3.12"]
     env:
-      POETRY_CACHE_DIR: /opt/poetry-${{ matrix.python-version }}/cache
+      VIRTUAL_ENV: /opt/venv-${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@v4
       - name: Install Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install poetry
-        run: pip install poetry
-      - uses: actions/cache@v4
-        name: Define a cache for the virtual environment based on the dependencies lock file
+      - name: Define a cache for venv
+        uses: actions/cache@v4
         with:
-          path: /opt/poetry-${{ matrix.python-version }}/cache
-          key: poetry-${{ matrix.python-version }}-${{ hashFiles('poetry.lock') }}
+          path: /opt/venv-${{ matrix.python-version }}
+          key: venv-${{ matrix.python-version }}-${{ hashFiles('poetry.lock') }}
+      - name: Create venv
+        run: python -m venv $VIRTUAL_ENV
+      - name: Install poetry
+        run: $VIRTUAL_ENV/bin/pip install poetry
       - name: Install the project dependencies
-        run: poetry install --without=examples --all-extras
-      - name: check env
-        run: ls -la /opt/poetry-${{ matrix.python-version }}/cache
+        run: $VIRTUAL_ENV/bin/poetry install --without=examples --all-extras
       - name: Upload poetry venv
         uses: actions/upload-artifact@v4
         with:
-          path: /opt/poetry-${{ matrix.python-version }}/cache
-          name: poetry-${{ matrix.python-version }}
+          path: /opt/venv-${{ matrix.python-version }}
+          name: venv-${{ matrix.python-version }}
           if-no-files-found: error
 
   static-checks:
@@ -50,14 +50,19 @@ jobs:
         #        python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
         python-version: [ "3.9", "3.12"]
     env:
-      POETRY_CACHE_DIR: /opt/poetry-${{ matrix.python-version }}/cache
-    needs: poetry-env
+      VIRTUAL_ENV: /opt/venv-${{ matrix.python-version }}
+    needs: poetry-venv
     steps:
-      - name: Download poetry env
+      - uses: actions/checkout@v4
+      - name: Install Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Download poetry venv
         uses: actions/download-artifact@v4
         with:
-          path: /opt/poetry-${{ matrix.python-version }}/cache
-          name: poetry-${{ matrix.python-version }}
+          path: /opt/venv-${{ matrix.python-version }}
+          name: venv-${{ matrix.python-version }}
       - name: Run mypy
         run: poetry run mypy
       - name: Run ruff check
