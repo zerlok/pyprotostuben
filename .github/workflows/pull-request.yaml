@@ -10,7 +10,7 @@ on:
 
 jobs:
   venv:
-    uses: setup.yaml
+    uses: ./.github/workflows/setup.yaml
 
   lint:
     needs: venv
