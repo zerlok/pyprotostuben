@@ -36,6 +36,7 @@ jobs:
           poetry config virtualenvs.create true
           poetry config virtualenvs.in-project false
       - name: Cache venv
+        id: cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/pypoetry
@@ -53,12 +54,16 @@ jobs:
       - name: Run ruff format
         run: poetry run ruff format --check
       - name: Download protoc ${{ matrix.protoc-version }}
+        if: steps.cache.outputs.cache-hit != 'true'
         run: wget -O protoc.zip "https://github.com/protocolbuffers/protobuf/releases/download/v${{ matrix.protoc-version }}/protoc-${{ matrix.protoc-version }}-linux-x86_64.zip"
       - name: Unzip protoc ${{ matrix.protoc-version }}
+        if: steps.cache.outputs.cache-hit != 'true'
         run: unzip -n protoc.zip 'bin/*' 'include/google/protobuf/*' -d $(poetry env info -p)
       - name: Download buf ${{ matrix.buf-version }}
+        if: steps.cache.outputs.cache-hit != 'true'
         run: wget -O $(poetry env info -p)/bin/buf "https://github.com/bufbuild/buf/releases/download/v${{ matrix.buf-version }}/buf-Linux-x86_64"
       - name: Allow run buf ${{ matrix.buf-version }}
+        if: steps.cache.outputs.cache-hit != 'true'
         run: chmod +x $(poetry env info -p)/bin/buf
       - name: Run pytest
         run: poetry run pytest --cov-report=xml
