@@ -47,15 +47,13 @@ jobs:
       - name: Download protoc ${{ matrix.protoc-version }}
         run: wget -q -O protoc.zip "https://github.com/protocolbuffers/protobuf/releases/download/v${{ matrix.protoc-version }}/protoc-${{ matrix.protoc-version }}-linux-x86_64.zip"
       - name: Unzip protoc ${{ matrix.protoc-version }}
-        run: unzip -q -n protoc.zip 'bin/*' 'include/google/protobuf/*' -d .venv
+        run: unzip -q -n protoc.zip 'bin/*' 'include/google/protobuf/*' -d $(poetry env info -p)
       - name: Download buf ${{ matrix.buf-version }}
-        run: wget -q -O .venv/bin/buf "https://github.com/bufbuild/buf/releases/download/v${{ matrix.buf-version }}/buf-Linux-x86_64"
+        run: wget -q -O $(poetry env info -p)/buf "https://github.com/bufbuild/buf/releases/download/v${{ matrix.buf-version }}/buf-Linux-x86_64"
       - name: Allow run buf ${{ matrix.buf-version }}
-        run: chmod +x .venv/bin/buf
+        run: chmod +x $(poetry env info -p)/bin/buf
       - name: Run pytest
-        run: |
-          poetry shell
-          poetry run pytest --cov-report=xml
+        run: poetry run pytest --cov-report=xml
       - name: Upload results to Codecov
         uses: codecov/codecov-action@v4
         with:
