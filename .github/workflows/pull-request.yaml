@@ -10,15 +10,14 @@ on:
 
 jobs:
   venv:
-    setup:
-      runs-on: ubuntu-latest
-      strategy:
-        fail-fast: false
-        matrix:
-          #        python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
-          python-version: [ "3.9" ]
-          protoc-version: [ "26.1" ]
-          buf-version: [ "1.38.0" ]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        #        python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
+        python-version: [ "3.9" ]
+        protoc-version: [ "26.1" ]
+        buf-version: [ "1.38.0" ]
     steps:
       - uses: ./.github/setup.yaml
         with:
@@ -28,13 +27,12 @@ jobs:
 
   lint:
     needs: venv
-    setup:
-      runs-on: ubuntu-latest
-      strategy:
-        fail-fast: false
-        matrix:
-          #        python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
-          python-version: [ "3.9" ]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        #        python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
+        python-version: [ "3.9" ]
     steps:
       - uses: ./.github/setup.yaml
         with:
@@ -51,15 +49,14 @@ jobs:
 
   test:
     needs: lint
-    setup:
-      runs-on: ubuntu-latest
-      strategy:
-        fail-fast: false
-        matrix:
-          #        python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
-          python-version: [ "3.9" ]
-          protoc-version: [ "26.1" ]
-          buf-version: [ "1.38.0" ]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        #        python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
+        python-version: [ "3.9" ]
+        protoc-version: [ "26.1" ]
+        buf-version: [ "1.38.0" ]
     steps:
       - uses: ./.github/setup.yaml
         with:
