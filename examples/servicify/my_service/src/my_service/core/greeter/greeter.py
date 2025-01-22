@@ -19,9 +19,9 @@ class Greeter:
         self.__previous.append(message)
 
     # TODO: support streaming
-    # def stream_greetings(self, users: t.Iterator[UserInfo]) -> t.Iterator[str]:
-    #     for user in users:
-    #         yield self.greet(user)
+    async def stream_greetings(self, users: t.AsyncIterator[UserInfo]) -> t.AsyncIterator[str]:
+        async for user in users:
+            yield self.greet(user)
 
 
 @entrypoint(name="Users")

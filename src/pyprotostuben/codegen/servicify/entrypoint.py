@@ -7,7 +7,13 @@ from functools import partial
 from pathlib import Path
 from types import ModuleType
 
-from pyprotostuben.codegen.servicify.model import EntrypointInfo, EntrypointOptions, MethodInfo
+from pyprotostuben.codegen.servicify.model import (
+    EntrypointInfo,
+    EntrypointOptions,
+    MethodInfo,
+    StreamStreamMethodInfo,
+    UnaryUnaryMethodInfo,
+)
 from pyprotostuben.python.info import TypeInfo
 
 P = t.ParamSpec("P")
@@ -108,10 +114,32 @@ def inspect_module(module: ModuleType) -> t.Iterable[EntrypointInfo]:
 def inspect_method(name: str, func: t.Callable[..., object]) -> MethodInfo:
     signature = inspect.signature(func)
 
-    return MethodInfo(
+    params = list(signature.parameters.values())[1:]
+
+    # TODO: uncomment
+    if len(params) == 1 and (streaming_type := extract_streaming_type(params[0].annotation)) is not None:
+        return StreamStreamMethodInfo(
+            name=name,
+            input_=params[0].replace(annotation=streaming_type),
+            output=extract_streaming_type(signature.return_annotation),
+            doc=inspect.getdoc(func),
+        )
+
+    return UnaryUnaryMethodInfo(
         name=name,
         # skip `self`
-        params=list(signature.parameters.values())[1:],
+        params=params,
         returns=signature.return_annotation,
         doc=inspect.getdoc(func),
     )
+
+
+def extract_streaming_type(obj: object) -> t.Optional[type[object]]:
+    origin = t.get_origin(obj)
+    if not isinstance(origin, type) or not issubclass(origin, (t.Iterator, t.AsyncIterator)):
+        return None
+
+    args = t.get_args(obj)
+    assert len(args) == 1
+
+    return args[0]

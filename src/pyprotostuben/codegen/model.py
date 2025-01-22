@@ -6,7 +6,7 @@ from functools import cached_property
 
 from pyprotostuben.python.builder2 import (
     AttrASTBuilder,
-    ClassSignatureASTBuilder,
+    ClassHeaderASTBuilder,
     Expr,
     ModuleASTBuilder,
     ScopeASTBuilder,
@@ -27,7 +27,7 @@ from pyprotostuben.python.visitor.walker import DefaultTypeWalkerTrait, TypeWalk
 
 class ModelFactory(metaclass=abc.ABCMeta):
     @abc.abstractmethod
-    def create_class_def(self, builder: ModuleASTBuilder, name: str) -> ClassSignatureASTBuilder:
+    def create_class_def(self, builder: ModuleASTBuilder, name: str) -> ClassHeaderASTBuilder:
         raise NotImplementedError
 
 
@@ -92,13 +92,13 @@ class ModelASTBuilder:
 
 class DataclassModelFactory(ModelFactory):
     @t.override
-    def create_class_def(self, builder: ModuleASTBuilder, name: str) -> ClassSignatureASTBuilder:
+    def create_class_def(self, builder: ModuleASTBuilder, name: str) -> ClassHeaderASTBuilder:
         return builder.class_def(name).dataclass(frozen=True, kw_only=True)
 
 
 class PydanticModelFactory(ModelFactory):
     @t.override
-    def create_class_def(self, builder: ModuleASTBuilder, name: str) -> ClassSignatureASTBuilder:
+    def create_class_def(self, builder: ModuleASTBuilder, name: str) -> ClassHeaderASTBuilder:
         return builder.class_def(name).inherits(self.__base_model)
 
     @cached_property

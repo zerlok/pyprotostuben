@@ -7,7 +7,7 @@ import click
 
 from pyprotostuben.codegen.servicify.entrypoint import inspect_source_dir
 from pyprotostuben.codegen.servicify.generator.fastapi import FastAPIServicifyCodeGenerator
-from pyprotostuben.codegen.servicify.model import GeneratorContext
+from pyprotostuben.codegen.servicify.model import GeneratorContext, StreamStreamMethodInfo, UnaryUnaryMethodInfo
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -126,7 +126,22 @@ def show(
             )
 
             for method in entrypoint.methods:
-                signature = inspect.Signature(parameters=method.params, return_annotation=method.returns)
+                if isinstance(method, UnaryUnaryMethodInfo):
+                    signature = inspect.Signature(parameters=method.params, return_annotation=method.returns)
+
+                elif isinstance(method, StreamStreamMethodInfo):
+                    signature = inspect.Signature(
+                        parameters=[
+                            method.input_.replace(
+                                annotation=t.Iterator[method.input_.annotation],
+                            ),
+                        ],
+                        return_annotation=t.Iterator[method.output],
+                    )
+
+                else:
+                    t.assert_never(method)
+
                 click.echo(f"   * {method.name}{signature}: {method.doc or ''}")
 
             click.echo("")

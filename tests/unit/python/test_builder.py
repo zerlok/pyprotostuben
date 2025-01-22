@@ -63,7 +63,7 @@ def build_simple_module() -> ModuleASTBuilder:
         with foo.init_self_attrs_def({"my_bar": bar}):
             pass
 
-        with foo.method_def("do_stuff").pos_arg("x", int).returns(str):
+        with foo.method_def("do_stuff").arg("x", int).returns(str):
             mod.assign_stmt(mod.attr("self", "__some"), bar.ref().init().kwarg("x", mod.attr("x")))
             mod.assign_stmt("x_str", mod.call(str, [mod.attr("x")]))
             mod.return_stmt(mod.attr("y").attr("__str__").call())
@@ -94,7 +94,7 @@ def build_bar_impl_module() -> ModuleASTBuilder:
         pkg.module("foo") as foo,
         foo.class_def("Foo") as foo_class,
         foo_class.method_def("do_stuff")
-        .pos_arg("spam", str)
+        .arg("spam", str)
         .returns(foo.type_(str).context_manager())
         .abstract()
         .not_implemented(),
@@ -104,7 +104,7 @@ def build_bar_impl_module() -> ModuleASTBuilder:
     with (
         pkg.module("bar") as bar,
         bar.class_def("Bar").inherits(foo_class) as _,
-        _.method_def("do_stuff").pos_arg("spam", str).returns(str).context_manager().override().stub(),
+        _.method_def("do_stuff").arg("spam", str).returns(str).context_manager().override().stub(),
     ):
         return bar
 

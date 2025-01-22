@@ -7,11 +7,24 @@ from pyprotostuben.python.info import TypeInfo
 
 
 @dataclass(frozen=True, kw_only=True)
-class MethodInfo:
+class BaseMethodInfo:
     name: str
+    doc: t.Optional[str]
+
+
+@dataclass(frozen=True, kw_only=True)
+class UnaryUnaryMethodInfo(BaseMethodInfo):
     params: t.Sequence[inspect.Parameter]
     returns: type[object] | None
-    doc: t.Optional[str]
+
+
+@dataclass(frozen=True, kw_only=True)
+class StreamStreamMethodInfo(BaseMethodInfo):
+    input_: inspect.Parameter
+    output: type[object] | None
+
+
+MethodInfo: t.TypeAlias = t.Union[UnaryUnaryMethodInfo, StreamStreamMethodInfo]
 
 
 @dataclass(frozen=True, kw_only=True)
