@@ -83,6 +83,10 @@ ignore = [
     "ISC001", # because ruff format suggests to skip it
     "RET505", # clashes with mypy exhaustiveness check
     "S101", # allow asserts for tests checks and mypy help
+    # TODO: stop ignore this rule
+    "UP007", # because of 3.9 support
+    # TODO: stop ignore this rule
+    "SIM117", # because ast builder 2.0 uses with statement to build contextual scope statemetns
 ]
 
 [tool.ruff.lint.per-file-ignores]

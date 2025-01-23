@@ -133,10 +133,12 @@ def show(
                     signature = inspect.Signature(
                         parameters=[
                             method.input_.replace(
-                                annotation=t.Iterator[method.input_.annotation],
+                                # TODO: find a way to avoid type-ignore
+                                annotation=t.Iterator[method.input_.annotation],  # type: ignore[name-defined]
                             ),
                         ],
-                        return_annotation=t.Iterator[method.output],
+                        # TODO: find a way to avoid type-ignore
+                        return_annotation=t.Iterator[method.output],  # type: ignore[name-defined]
                     )
 
                 else:

@@ -66,6 +66,8 @@ class FastAPITypeRegistry:
         doc: t.Optional[str],
     ) -> None:
         model_ref = self.__builder.create_def(self.__create_model_name(entrypoint, method, "Request"), fields, doc)
+        # TODO: remove assert
+        assert isinstance(model_ref, TypeInfoProvider)
         self.__requests[(entrypoint.name, method.name)] = model_ref
 
     def register_response(
@@ -76,6 +78,8 @@ class FastAPITypeRegistry:
         doc: t.Optional[str],
     ) -> None:
         model_ref = self.__builder.create_def(self.__create_model_name(entrypoint, method, "Response"), fields, doc)
+        # TODO: remove assert
+        assert isinstance(model_ref, TypeInfoProvider)
         self.__responses[(entrypoint.name, method.name)] = model_ref
 
     def __create_model_name(
@@ -280,10 +284,12 @@ class FastAPIServicifyCodeGenerator(ServicifyCodeGenerator):
         response_ref = registry.get_response(entrypoint, method)
 
         if method.output is None:
-            raise ValueError("invalid method", method)
+            detail = "invalid method"
+            raise ValueError(detail, method)
 
         if response_ref is None:
-            raise ValueError("invalid method", method)
+            detail = "invalid method"
+            raise ValueError(detail, method)
 
         with (
             _.method_def(method.name)
@@ -429,10 +435,12 @@ class FastAPIServicifyCodeGenerator(ServicifyCodeGenerator):
         response_def = registry.get_response(entrypoint, method)
 
         if method.output is None:
-            raise ValueError("invalid method", method)
+            detail = "invalid method"
+            raise ValueError(detail, method)
 
         if response_def is None:
-            raise ValueError("invalid method", method)
+            detail = "invalid method"
+            raise ValueError(detail, method)
 
         with (
             _.method_def(method.name)
@@ -492,8 +500,11 @@ class FastAPIServicifyCodeGenerator(ServicifyCodeGenerator):
                             _.yield_stmt(_.attr("response"))
 
     def __build_model_load_expr(self, builder: ScopeASTBuilder, model: TypeRef, source: t.Union[str, Expr]) -> Expr:
-        _ = builder
-        return _.attr(model, "model_validate_json").call().arg(_.attr(source) if isinstance(source, str) else source)
+        return (
+            builder.attr(model, "model_validate_json")
+            .call()
+            .arg(builder.attr(source) if isinstance(source, str) else source)
+        )
 
     def __build_model_dump_expr(
         self,
@@ -502,10 +513,9 @@ class FastAPIServicifyCodeGenerator(ServicifyCodeGenerator):
         *,
         intermediate: bool = False,
     ) -> Expr:
-        _ = builder
         return (
-            _.attr(source, "model_dump_json" if not intermediate else "model_dump")
-            .call(kwargs={"mode": _.const("json")} if intermediate else None)
-            .kwarg("by_alias", _.const(value=True))
-            .kwarg("exclude_none", _.const(value=True))
+            builder.attr(source, "model_dump_json" if not intermediate else "model_dump")
+            .call(kwargs={"mode": builder.const("json")} if intermediate else None)
+            .kwarg("by_alias", builder.const(value=True))
+            .kwarg("exclude_none", builder.const(value=True))
         )

@@ -12,6 +12,8 @@
 
 ## Usage
 
+Currently, supports python 3.12 and higher.
+
 1) Pull & install project from github (pypi will be added in the future)
 2) Install project dependencies and extras (e.g. with poetry `poetry install --all-extras`)
     1) this will add `servicify` CLI to virtual environment, CLI code

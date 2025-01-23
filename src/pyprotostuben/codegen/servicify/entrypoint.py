@@ -142,4 +142,5 @@ def extract_streaming_type(obj: object) -> t.Optional[type[object]]:
     args = t.get_args(obj)
     assert len(args) == 1
 
-    return args[0]
+    # TODO: remove cast, check types
+    return t.cast(type[object], args[0])

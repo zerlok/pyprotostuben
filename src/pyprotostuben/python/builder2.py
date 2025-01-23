@@ -36,10 +36,14 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import cache, cached_property
 from itertools import chain
-from types import TracebackType
 
 from pyprotostuben.python.info import ModuleInfo, PackageInfo, TypeInfo
 
+if t.TYPE_CHECKING:
+    from types import TracebackType
+
+else:
+    TracebackType = t.Any
 T_co = t.TypeVar("T_co", covariant=True)
 
 
@@ -756,9 +760,9 @@ class _BaseHeaderASTBuilder(t.Generic[T_co], StatementASTBuilder, metaclass=abc.
 
     def __exit__(
         self,
-        exc_type: t.Optional[type[BaseException]],
-        exc_value: t.Optional[BaseException],
-        exc_traceback: t.Optional[TracebackType],
+        exc_type: object,
+        exc_value: object,
+        exc_traceback: object,
     ) -> None:
         if exc_type is None:
             # 1. build statements using nested context
@@ -868,7 +872,11 @@ class _BaseScopeBodyASTBuilder(ScopeASTBuilder, StatementASTBuilder):
         return self.__parent.build()
 
 
-class _BaseChainedASTBuilder(_BaseHeaderASTBuilder[t.Self], metaclass=abc.ABCMeta):
+class _BaseChainedASTBuilder(
+    # TODO: find away to use Self outside class
+    _BaseHeaderASTBuilder[t.Self],  # type: ignore[misc]
+    metaclass=abc.ABCMeta,
+):
     def _create_scope_builder(self) -> t.Self:
         return self
 
@@ -884,9 +892,9 @@ class _BaseChainPartASTBuilder(_BaseHeaderASTBuilder[ScopeASTBuilder]):
 
     def __exit__(
         self,
-        exc_type: t.Optional[type[BaseException]],
-        exc_value: t.Optional[BaseException],
-        exc_traceback: t.Optional[TracebackType],
+        exc_type: object,
+        exc_value: object,
+        exc_traceback: object,
     ) -> None:
         if exc_type is None:
             # 1. build statements using nested context
@@ -1091,7 +1099,8 @@ class TryStatementASTBuilder(_BaseChainedASTBuilder):
 
     def build(self) -> t.Sequence[ast.stmt]:
         if not self.__excepts and self.__finally is None:
-            raise RuntimeError("invalid try-except-finally block", self)
+            detail = "invalid try-except-finally block"
+            raise RuntimeError(detail, self)
 
         return [
             ast.Try(
@@ -1425,9 +1434,9 @@ class ModuleASTBuilder(ScopeASTBuilder):
 
     def __exit__(
         self,
-        exc_type: t.Optional[type[BaseException]],
-        exc_value: t.Optional[BaseException],
-        exc_traceback: t.Optional[TracebackType],
+        exc_type: object,
+        exc_value: object,
+        exc_traceback: object,
     ) -> None:
         if exc_type is None:
             scope = self._context.leave_module()
@@ -1480,9 +1489,9 @@ class PackageASTBuilder:
 
     def __exit__(
         self,
-        exc_type: t.Optional[type[BaseException]],
-        exc_value: t.Optional[BaseException],
-        exc_traceback: t.Optional[TracebackType],
+        exc_type: object,
+        exc_value: object,
+        exc_traceback: object,
     ) -> None:
         if exc_type is not None:
             return
