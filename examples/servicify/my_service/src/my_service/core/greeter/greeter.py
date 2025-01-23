@@ -18,7 +18,6 @@ class Greeter:
     def notify_greeted(self, user: UserInfo, message: str) -> None:
         self.__previous.append(message)
 
-    # TODO: support streaming
     async def stream_greetings(self, users: t.AsyncIterator[UserInfo]) -> t.AsyncIterator[str]:
         async for user in users:
             yield self.greet(user)

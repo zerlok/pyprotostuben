@@ -8,9 +8,8 @@ from api.model import GreeterGreetRequest, GreeterStreamGreetingsRequest, UserIn
 
 async def main() -> None:
     async with httpx.AsyncClient(base_url="http://localhost:8000") as client:
-        print(await client.get("/ping"))
-
         greeter = GreeterAsyncClient(client)
+
         response = await greeter.greet(GreeterGreetRequest(user=UserInfo(id_=42, name="John")))
         print(response.payload)
 
