@@ -33,7 +33,7 @@ python = "^3.9"
 protobuf = ">=5.28.3,<7.0.0"
 
 [tool.poetry.group.dev.dependencies]
-types-protobuf = "^5.28.3.20241030"
+types-protobuf = ">=5.28.3.20241030,<7.0.0.0"
 mypy = "^1.13.0"
 pytest = "^8.3.3"
 pytest-cov = "^6.0.0"
