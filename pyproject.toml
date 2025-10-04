@@ -33,19 +33,19 @@ python = "^3.9"
 protobuf = ">=5.28.3,<7.0.0"
 
 [tool.poetry.group.dev.dependencies]
-types-protobuf = "^5.28.3.20241030"
+types-protobuf = ">=5.28.3.20241030,<7.0.0.0"
 mypy = "^1.13.0"
 pytest = "^8.3.3"
-pytest-cov = "^6.0.0"
+pytest-cov = ">=6,<8"
 pytest-mypy-plugins = "^3.1.2"
-ruff = ">=0.7.4,<0.12.0"
+ruff = ">=0.7.4,<0.14.0"
 grpc-stubs = "^1.53.0.5"
-BrokRPC = { version = "^0.2.0", python = ">=3.12,<4.0" }
+BrokRPC = { version = ">=0.2,<0.4", python = ">=3.12,<4.0" }
 pyyaml = "^6.0.2"
 types-pyyaml = "^6.0.12.20240917"
 
 [tool.poetry.group.examples.dependencies]
-BrokRPC = { version = "^0.2.0", extras = ["aiormq"], python = ">=3.12,<4.0" }
+BrokRPC = { version = ">=0.2,<0.4", extras = ["aiormq"], python = ">=3.12,<4.0" }
 
 
 [build-system]
